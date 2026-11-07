@@ -7,11 +7,11 @@ import {
     Image,
     Modal,
 } from 'react-native';
-import { LocalizedText as Text, LocalizedTextInput as TextInput } from '../context/LanguageContext';
+import { LocalizedText as Text, LocalizedTextInput as TextInput, useLanguage } from '../context/LanguageContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useShop } from '../context/ShopContext';
 import { Header } from '../components/Header';
-import { Order, Product } from '../types';
+import { CATEGORIES } from '../data/mockData';
 
 export const AdminScreen: React.FC = () => {
     const {
@@ -23,6 +23,7 @@ export const AdminScreen: React.FC = () => {
         formatPrice,
         navigateTo,
     } = useShop();
+    const { language } = useLanguage();
 
     const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'coupons'>('orders');
     const [orderFilter, setOrderFilter] = useState<'all' | 'placed' | 'processing' | 'shipped' | 'delivered'>('all');
@@ -31,12 +32,14 @@ export const AdminScreen: React.FC = () => {
     // Add Product Modal Form State
     const [showAddModal, setShowAddModal] = useState(false);
     const [newTitle, setNewTitle] = useState('');
-    const [newBrand, setNewBrand] = useState('ZONE DE PAPY');
+    const [newBrand, setNewBrand] = useState('SECRET D’ANGE');
     const [newPrice, setNewPrice] = useState('149');
-    const [newCategory, setNewCategory] = useState('ACCESSORIES');
-    const [newProductType, setNewProductType] = useState('Accessory');
-    const [newImage, setNewImage] = useState('https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800');
+    const [newCategory, setNewCategory] = useState('ENTREPRENEURIAT');
+    const [newProductType, setNewProductType] = useState('Ebook de formation');
+    const [newImage, setNewImage] = useState('https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800');
     const [newSpecifications, setNewSpecifications] = useState('');
+    const [newEbookStoragePath, setNewEbookStoragePath] = useState('');
+    const [productFormError, setProductFormError] = useState<string | null>(null);
 
     // Active Promo Codes State
     const [promoCodes, setPromoCodes] = useState([
@@ -47,17 +50,21 @@ export const AdminScreen: React.FC = () => {
     const [newCouponCode, setNewCouponCode] = useState('');
 
     // Calculations
-    const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+    const totalRevenue = orders.filter((order) => order.paymentStatus === 'paid' && order.paymentVerified).reduce((sum, order) => sum + order.total, 0);
     const filteredOrders = orders.filter((o) => {
         const matchesStatus = orderFilter === 'all' || o.status === orderFilter;
         const matchesQuery =
             o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            o.shippingAddress.fullName.toLowerCase().includes(searchQuery.toLowerCase());
+            (o.shippingAddress?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase());
         return matchesStatus && matchesQuery;
     });
 
     const handleCreateProduct = () => {
-        if (!newTitle) return;
+        if (!newTitle.trim() || !newEbookStoragePath.trim()) {
+            setProductFormError('Renseignez le titre et le chemin du PDF dans le bucket privé.');
+            return;
+        }
+        setProductFormError(null);
         addProduct({
             name: newTitle,
             brand: newBrand,
@@ -67,15 +74,18 @@ export const AdminScreen: React.FC = () => {
             reviewsCount: 1,
             category: newCategory,
             productType: newProductType,
-            colors: [{ name: 'Black', hex: '#111111' }],
+            colors: [{ name: 'Ebook PDF', hex: '#6d28d9' }],
             images: [newImage],
-            description: 'New electronics product from the Zone de Papy catalog.',
+            description: 'Ebook de formation pratique disponible après confirmation du paiement.',
             specifications: newSpecifications,
             isNewIn: true,
             isBestSeller: false,
+            ebookFormat: 'pdf',
+            ebookStoragePath: newEbookStoragePath.trim(),
         });
         setShowAddModal(false);
         setNewTitle('');
+        setNewEbookStoragePath('');
     };
 
     const handleAddCoupon = () => {
@@ -97,7 +107,7 @@ export const AdminScreen: React.FC = () => {
                     <View>
                         <View style={styles.adminTitleBadge}>
                             <Ionicons name="shield-checkmark" size={16} color="#8b72e6" />
-                            <Text style={styles.adminBadgeText}>ZONE DE PAPY ADMIN PANEL</Text>
+                            <Text style={styles.adminBadgeText}>SECRET D’ANGE · ADMINISTRATION</Text>
                         </View>
                         <Text style={styles.pageTitle}>Operations & Fulfillment Center</Text>
                     </View>
@@ -159,7 +169,7 @@ export const AdminScreen: React.FC = () => {
                             color={activeTab === 'orders' ? '#ffffff' : '#475569'}
                         />
                         <Text style={[styles.tabButtonText, activeTab === 'orders' && styles.tabButtonTextActive]}>
-                            Orders Management ({orders.length})
+                            {language === 'fr' ? `Gestion des commandes (${orders.length})` : `Orders Management (${orders.length})`}
                         </Text>
                     </TouchableOpacity>
 
@@ -173,7 +183,7 @@ export const AdminScreen: React.FC = () => {
                             color={activeTab === 'products' ? '#ffffff' : '#475569'}
                         />
                         <Text style={[styles.tabButtonText, activeTab === 'products' && styles.tabButtonTextActive]}>
-                            Inventory Catalog ({products.length})
+                            {language === 'fr' ? `Catalogue d’inventaire (${products.length})` : `Inventory Catalog (${products.length})`}
                         </Text>
                     </TouchableOpacity>
 
@@ -187,7 +197,7 @@ export const AdminScreen: React.FC = () => {
                             color={activeTab === 'coupons' ? '#ffffff' : '#475569'}
                         />
                         <Text style={[styles.tabButtonText, activeTab === 'coupons' && styles.tabButtonTextActive]}>
-                            Promotions & Coupons ({promoCodes.length})
+                            {language === 'fr' ? `Promotions & Coupons (${promoCodes.length})` : `Promotions & Coupons (${promoCodes.length})`}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -231,7 +241,7 @@ export const AdminScreen: React.FC = () => {
                                     <View style={styles.orderTopRow}>
                                         <View>
                                             <Text style={styles.orderAdminId}>Order #{order.id}</Text>
-                                            <Text style={styles.orderAdminDate}>{order.date} • Paid via {order.paymentMethod.toUpperCase()}</Text>
+                                            <Text style={styles.orderAdminDate}>{order.date} • Paiement : {order.paymentStatus.toUpperCase()}</Text>
                                         </View>
 
                                         {/* Status Modifier Switcher */}
@@ -260,19 +270,11 @@ export const AdminScreen: React.FC = () => {
 
                                     <View style={styles.divider} />
 
-                                    {/* Customer Info & Address */}
+                                    {/* Digital order information */}
                                     <View style={styles.customerDetailsRow}>
                                         <View style={styles.customerCol}>
-                                            <Text style={styles.colLabel}>Customer Details</Text>
-                                            <Text style={styles.colName}>{order.shippingAddress.fullName}</Text>
-                                            <Text style={styles.colSub}>{order.shippingAddress.phone}</Text>
-                                        </View>
-
-                                        <View style={styles.customerCol}>
-                                            <Text style={styles.colLabel}>Delivery Address (Leaflet Map Pin)</Text>
-                                            <Text style={styles.colAddress}>
-                                                {order.shippingAddress.address}, {order.shippingAddress.city} {order.shippingAddress.postalCode}
-                                            </Text>
+                                            <Text style={styles.colLabel}>Commande numérique</Text>
+                                            <Text style={styles.colName}>{order.paymentStatus === 'paid' && order.paymentVerified ? 'Accès ebook activé' : 'Accès en attente du paiement'}</Text>
                                         </View>
 
                                         <View style={styles.customerColRight}>
@@ -388,16 +390,16 @@ export const AdminScreen: React.FC = () => {
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={styles.inputLabel}>Electronics Category</Text>
+                                <Text style={styles.inputLabel}>Catégorie de formation</Text>
                                 <View style={styles.rowForm}>
-                                    {['SMARTPHONES', 'COMPUTERS', 'AUDIO', 'ACCESSORIES', 'GAMING'].map((category) => (
+                                    {CATEGORIES.filter((category) => category.id !== 'ALL').map((category) => (
                                         <TouchableOpacity
-                                            key={category}
-                                            style={[styles.statusChip, newCategory === category && styles.statusChipActive]}
-                                            onPress={() => setNewCategory(category)}
+                                            key={category.id}
+                                            style={[styles.statusChip, newCategory === category.id && styles.statusChipActive]}
+                                            onPress={() => setNewCategory(category.id)}
                                         >
-                                            <Text style={[styles.statusChipText, newCategory === category && styles.statusChipTextActive]}>
-                                                {category}
+                                            <Text style={[styles.statusChipText, newCategory === category.id && styles.statusChipTextActive]}>
+                                                {category.name}
                                             </Text>
                                         </TouchableOpacity>
                                     ))}
@@ -410,7 +412,7 @@ export const AdminScreen: React.FC = () => {
                                     style={styles.modalInput}
                                     value={newProductType}
                                     onChangeText={setNewProductType}
-                                    placeholder="e.g. Smartphone, Laptop, Speaker"
+                                    placeholder="Ebook de formation"
                                 />
                             </View>
 
@@ -432,17 +434,29 @@ export const AdminScreen: React.FC = () => {
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={styles.inputLabel}>Technical Specifications</Text>
+                                <Text style={styles.inputLabel}>Contenu / modules</Text>
                                 <TextInput
                                     style={styles.modalInput}
                                     value={newSpecifications}
                                     onChangeText={setNewSpecifications}
-                                    placeholder="Storage, connectivity, battery..."
+                                    placeholder="PDF • Modules • Exercices pratiques"
                                 />
                             </View>
 
+                            <View style={styles.formGroup}>
+                                <Text style={styles.inputLabel}>Chemin du PDF dans le bucket privé « ebooks »</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={newEbookStoragePath}
+                                    onChangeText={setNewEbookStoragePath}
+                                    placeholder="formations/mon-ebook.pdf"
+                                    autoCapitalize="none"
+                                />
+                            </View>
+
+                            {productFormError ? <Text style={styles.orderAdminDate}>{productFormError}</Text> : null}
                             <TouchableOpacity style={styles.saveProductBtn} onPress={handleCreateProduct}>
-                                <Text style={styles.saveProductBtnText}>PUBLISH TO CATALOG</Text>
+                                <Text style={styles.saveProductBtnText}>PUBLIER L’EBOOK</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

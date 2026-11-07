@@ -1,5 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { LocalizedText as Text } from '../context/LanguageContext';
 import { useShop } from '../context/ShopContext';
 
 type FooterProps = {
@@ -7,9 +9,9 @@ type FooterProps = {
 };
 
 const serviceHighlights = [
-    'Une sélection technologique pour le quotidien',
+    'Des ebooks conçus pour apprendre des compétences utiles',
     'Paiement mobile simple et sécurisé',
-    'Suivi de commande depuis votre compte',
+    'Lecture et téléchargement depuis votre bibliothèque',
 ];
 
 export const Footer: React.FC<FooterProps> = ({ horizontalBleed = 0 }) => {
@@ -45,6 +47,10 @@ export const Footer: React.FC<FooterProps> = ({ horizontalBleed = 0 }) => {
 
     return (
         <View style={[styles.footer, horizontalBleed > 0 && { marginHorizontal: -horizontalBleed }]}>
+            <LinearGradient
+                colors={['#17112b', '#080611']}
+                style={StyleSheet.absoluteFill}
+            />
             <View style={styles.content}>
                 <View style={[styles.serviceRow, isMobile && styles.serviceRowMobile]}>
                     {serviceHighlights.map((label) => (
@@ -58,23 +64,23 @@ export const Footer: React.FC<FooterProps> = ({ horizontalBleed = 0 }) => {
                     <View style={[styles.brandColumn, isMobile && styles.brandColumnMobile]}>
                         <TouchableOpacity
                             accessibilityRole="button"
-                            accessibilityLabel="Accueil Zone de Papy"
+                            accessibilityLabel="Accueil Secret d’Ange"
                             onPress={() => navigateTo('shop')}
                             activeOpacity={0.8}
                             style={styles.brandLockup}
                         >
-                            <Text style={styles.brandName}>Zone de Papy</Text>
+                            <Text style={styles.brandName}>Secret d’Ange</Text>
                         </TouchableOpacity>
                         <Text style={styles.brandDescription}>
-                            Des produits technologiques soigneusement sélectionnés pour simplifier votre quotidien.
+                            Des formations pratiques en ebook pour apprendre à votre rythme et faire avancer vos projets.
                         </Text>
                     </View>
 
-                    {linkColumn('La boutique', [
-                        { label: 'Tous les produits', onPress: () => navigateTo('shop') },
+                    {linkColumn('La bibliothèque', [
+                        { label: 'Tous les ebooks', onPress: () => navigateTo('shop') },
                         { label: 'Explorer', onPress: () => navigateTo('explore') },
-                        { label: 'Accessoires', onPress: () => openCategory('ACCESSORIES') },
-                        { label: 'Jeux vidéo', onPress: () => openCategory('GAMING') },
+                        { label: 'Entrepreneuriat', onPress: () => openCategory('ENTREPRENEURIAT') },
+                        { label: 'Marketing digital', onPress: () => openCategory('MARKETING DIGITAL') },
                     ])}
 
                     {linkColumn('Mon espace', [
@@ -85,8 +91,8 @@ export const Footer: React.FC<FooterProps> = ({ horizontalBleed = 0 }) => {
                 </View>
 
                 <View style={[styles.bottomBar, isMobile && styles.bottomBarMobile]}>
-                    <Text style={styles.copyright}>© {year} Zone de Papy. Tous droits réservés.</Text>
-                    <Text style={styles.bottomNote}>La technologie, en toute simplicité.</Text>
+                    <Text style={styles.copyright}>© {year} Secret d’Ange. Tous droits réservés.</Text>
+                    <Text style={styles.bottomNote}>Apprendre aujourd’hui, progresser demain.</Text>
                 </View>
             </View>
         </View>

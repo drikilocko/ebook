@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Modal, FlatList, useWindowDimensions, Image } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LocalizedText as Text, LocalizedTextInput as TextInput, useLanguage } from '../context/LanguageContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useShop } from '../context/ShopContext';
@@ -32,13 +31,6 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
 
     return (
         <View style={[styles.headerContainer, overlay && styles.overlayHeader]}>
-            {overlay && (
-                <BlurView
-                    intensity={55}
-                    tint="dark"
-                    style={StyleSheet.absoluteFill}
-                />
-            )}
             <View style={styles.topRow}>
                 {/* Brand Logo */}
                 {!isMobile && (
@@ -48,7 +40,7 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
                         style={styles.logoContainer}
                     >
                         <Text style={[styles.logoText, overlay && styles.overlayLogoText, isSmall && styles.logoTextSmall]}>
-                            Zone de Papy
+                            Secret d’Ange
                         </Text>
                     </TouchableOpacity>
                 )}
@@ -59,7 +51,7 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
                         <Feather name="search" size={18} color={overlay ? '#ffffff' : '#888888'} style={styles.searchIcon} />
                         <TextInput
                             style={[styles.searchInput, overlay && styles.overlayText]}
-                            placeholder="Search electronics, brands, and more..."
+                            placeholder={language === 'fr' ? 'Rechercher une formation…' : 'Search training ebooks…'}
                             placeholderTextColor={overlay ? '#d4d4d4' : '#999999'}
                             value={filterState.searchQuery}
                             onChangeText={(text) => {
@@ -84,8 +76,12 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
                             <TouchableOpacity
                                 key={option}
                                 accessibilityRole="button"
-                                accessibilityLabel={option === 'en' ? 'English' : 'Français'}
-                                onPress={() => setLanguage(option)}
+                                onPress={() => {
+                                    setLanguage(option);
+                                    if (option === 'fr' && currency.code === 'USD') {
+                                        setCurrencyCode('FCFA');
+                                    }
+                                }}
                                 style={[
                                     styles.languageOption,
                                     overlay && styles.overlayLanguageOption,
@@ -123,6 +119,7 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
                             }
                         }}
                         activeOpacity={0.7}
+                        accessibilityLabel={language === 'fr' ? 'Mon compte et mes livres' : 'My account and books'}
                     >
                         {user && activeScreen !== 'shop' && !overlay ? (
                             <Image
@@ -228,7 +225,7 @@ export const Header: React.FC<{ overlay?: boolean }> = ({ overlay = false }) => 
                     <Feather name="search" size={18} color={overlay ? '#ffffff' : '#888888'} style={styles.searchIcon} />
                     <TextInput
                         style={[styles.searchInput, overlay && styles.overlayText]}
-                        placeholder="Search electronics, brands, and more..."
+                        placeholder={language === 'fr' ? 'Rechercher une formation…' : 'Search training ebooks…'}
                         placeholderTextColor={overlay ? '#d4d4d4' : '#999999'}
                         value={filterState.searchQuery}
                         onChangeText={(text) => {

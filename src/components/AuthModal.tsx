@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity } from 'react-native';
-import { LocalizedText as Text, LocalizedTextInput as TextInput } from '../context/LanguageContext';
+import { LocalizedText as Text, LocalizedTextInput as TextInput, useLanguage } from '../context/LanguageContext';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useShop } from '../context/ShopContext';
 import { getErrorMessage } from '../lib/supabase';
@@ -12,6 +12,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
     const { loginWithGoogle, loginWithEmail, signupWithEmail } = useShop();
+    const { language } = useLanguage();
 
     const [mode, setMode] = useState<'login' | 'signup'>('login');
     const [name, setName] = useState('');
@@ -23,7 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
     const handleEmailSubmit = async () => {
         setError('');
         if (!email || !password) {
-            setError('Please fill in all required fields.');
+            setError(language === 'fr' ? 'Renseignez votre e-mail et votre mot de passe.' : 'Please fill in all required fields.');
             return;
         }
 
@@ -31,12 +32,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
         try {
             if (mode === 'signup') {
                 if (!name) {
-                    setError('Please enter your full name.');
+                    setError(language === 'fr' ? 'Saisissez votre nom complet.' : 'Please enter your full name.');
                     return;
                 }
                 const hasSession = await signupWithEmail(name, email, password);
                 if (!hasSession) {
-                    setError('Check your email to confirm your account, then log in.');
+                    setError(language === 'fr' ? 'Confirmez votre compte avec le lien reçu par e-mail, puis connectez-vous.' : 'Check your email to confirm your account, then log in.');
                     return;
                 }
             } else {
@@ -70,9 +71,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                     {/* Header */}
                     <View style={styles.header}>
                         <View>
-                            <Text style={styles.brandTitle}>ZONE DE PAPY</Text>
+                            <Text style={styles.brandTitle}>SECRET D’ANGE</Text>
                             <Text style={styles.modalTitle}>
-                                {mode === 'login' ? 'Welcome Back!' : 'Create Your Account'}
+                                {mode === 'login'
+                                    ? (language === 'fr' ? 'Connectez-vous' : 'Welcome Back!')
+                                    : (language === 'fr' ? 'Créer un compte' : 'Create Your Account')}
                             </Text>
                         </View>
                         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -89,7 +92,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                                 setError('');
                             }}
                         >
-                            <Text style={[styles.tabBtnText, mode === 'login' && styles.tabBtnTextActive]}>LOG IN</Text>
+                            <Text style={[styles.tabBtnText, mode === 'login' && styles.tabBtnTextActive]}>
+                                {language === 'fr' ? 'CONNEXION' : 'LOG IN'}
+                            </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -99,7 +104,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                                 setError('');
                             }}
                         >
-                            <Text style={[styles.tabBtnText, mode === 'signup' && styles.tabBtnTextActive]}>CREATE ACCOUNT</Text>
+                            <Text style={[styles.tabBtnText, mode === 'signup' && styles.tabBtnTextActive]}>
+                                {language === 'fr' ? 'CRÉER UN COMPTE' : 'CREATE ACCOUNT'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
 
@@ -109,13 +116,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                             <Ionicons name="logo-google" size={18} color="#111111" />
                         </View>
                         <Text style={styles.googleBtnText}>
-                            {mode === 'login' ? 'Continue with Google' : 'Sign up with Google'}
+                            {language === 'fr'
+                                ? (mode === 'login' ? 'Continuer avec Google' : 'Créer un compte avec Google')
+                                : (mode === 'login' ? 'Continue with Google' : 'Sign up with Google')}
                         </Text>
                     </TouchableOpacity>
 
                     <View style={styles.dividerRow}>
                         <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>OR WITH EMAIL</Text>
+                        <Text style={styles.dividerText}>{language === 'fr' ? 'OU PAR E-MAIL' : 'OR WITH EMAIL'}</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
@@ -124,10 +133,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
 
                     {mode === 'signup' && (
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Full Name</Text>
+                            <Text style={styles.label}>{language === 'fr' ? 'Nom complet' : 'Full Name'}</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="e.g. Alex Morgan"
+                                placeholder={language === 'fr' ? 'Ex. Marie Koffi' : 'e.g. Alex Morgan'}
                                 value={name}
                                 onChangeText={setName}
                             />
@@ -135,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                     )}
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email Address</Text>
+                        <Text style={styles.label}>{language === 'fr' ? 'Adresse e-mail' : 'Email Address'}</Text>
                         <TextInput
                             style={styles.input}
                             placeholder="alex.morgan@gmail.com"
@@ -147,7 +156,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Password</Text>
+                        <Text style={styles.label}>{language === 'fr' ? 'Mot de passe' : 'Password'}</Text>
                         <TextInput
                             style={styles.input}
                             placeholder="••••••••"
@@ -159,7 +168,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose }) => {
 
                     <TouchableOpacity style={styles.primarySubmitBtn} onPress={handleEmailSubmit} disabled={loading}>
                         <Text style={styles.primarySubmitBtnText}>
-                            {loading ? 'PLEASE WAIT...' : mode === 'login' ? 'LOG IN TO SHOP' : 'CREATE ACCOUNT NOW'}
+                            {loading
+                                ? (language === 'fr' ? 'VEUILLEZ PATIENTER…' : 'PLEASE WAIT...')
+                                : language === 'fr'
+                                    ? (mode === 'login' ? 'SE CONNECTER' : 'CRÉER MON COMPTE')
+                                    : (mode === 'login' ? 'LOG IN TO SHOP' : 'CREATE ACCOUNT NOW')}
                         </Text>
                     </TouchableOpacity>
                 </TouchableOpacity>

@@ -1,323 +1,49 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, ScrollView, Image } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { LocalizedText as Text } from '../context/LanguageContext';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useShop } from '../context/ShopContext';
 import { Header } from '../components/Header';
+import { useShop } from '../context/ShopContext';
 
 export const OrderSuccessScreen: React.FC = () => {
-    const { activeOrder, formatPrice, navigateTo } = useShop();
-
-    if (!activeOrder) {
-        return (
-            <View style={styles.errorContainer}>
-                <Header />
-                <Text style={styles.errorText}>No active order found.</Text>
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => navigateTo('shop')}>
-                    <Text style={styles.primaryBtnText}>RETURN TO SHOP</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    const steps = [
-        { key: 'placed', label: 'Order Placed', desc: 'Received & Confirmed', done: true },
-        { key: 'processing', label: 'Processing', desc: 'Preparing package', done: true },
-        { key: 'shipped', label: 'Out for Delivery', desc: 'Courier on the way', done: false },
-        { key: 'delivered', label: 'Delivered', desc: 'Est: Tomorrow 5 PM', done: false },
-    ];
+    const { activeOrder, navigateTo } = useShop();
+    const paid = activeOrder?.paymentStatus === 'paid' && activeOrder.paymentVerified;
 
     return (
         <View style={styles.container}>
             <Header />
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* Celebration Top Card */}
-                <View style={styles.successHeaderCard}>
-                    <View style={styles.checkCircle}>
-                        <Ionicons name="checkmark" size={36} color="#ffffff" />
-                    </View>
-                    <Text style={styles.thankYouText}>Thank you for your order!</Text>
-                    <Text style={styles.orderIdText}>Order #{activeOrder.id}</Text>
-                    <Text style={styles.estimatedText}>
-                        Estimated Delivery: <Text style={styles.estHighlight}>{activeOrder.estimatedDelivery}</Text>
+            <ScrollView contentContainerStyle={styles.content}>
+                <View style={styles.successCard}>
+                    <View style={styles.check}><Feather name={paid ? 'check' : 'clock'} size={32} color="#ffffff" /></View>
+                    <Text style={styles.title}>{paid ? 'Paiement confirmé !' : 'Paiement en attente'}</Text>
+                    <Text style={styles.subtitle}>
+                        {paid
+                            ? 'Votre achat est validé. Vos ebooks sont maintenant disponibles dans votre bibliothèque.'
+                            : 'Nous attendons la confirmation de paiement. Vos ebooks seront accessibles dès réception.'}
                     </Text>
+                    {activeOrder ? <Text style={styles.orderId}>Référence : {activeOrder.id}</Text> : null}
                 </View>
-
-                {/* Live Tracking Timeline */}
-                <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Order Status Tracker</Text>
-
-                    <View style={styles.timelineWrapper}>
-                        {steps.map((step, idx) => (
-                            <View key={step.key} style={styles.stepItem}>
-                                <View style={styles.stepIndicatorCol}>
-                                    <View style={[styles.stepDot, step.done && styles.stepDotDone]}>
-                                        <Feather
-                                            name={step.done ? 'check' : 'clock'}
-                                            size={12}
-                                            color={step.done ? '#ffffff' : '#94a3b8'}
-                                        />
-                                    </View>
-                                    {idx < steps.length - 1 && (
-                                        <View style={[styles.stepLine, step.done && styles.stepLineDone]} />
-                                    )}
-                                </View>
-                                <View style={styles.stepTextCol}>
-                                    <Text style={[styles.stepLabel, step.done && styles.stepLabelDone]}>
-                                        {step.label}
-                                    </Text>
-                                    <Text style={styles.stepDesc}>{step.desc}</Text>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                {/* Order Details & Summary */}
-                <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Order Items ({activeOrder.items.length})</Text>
-
-                    {activeOrder.items.map((item, idx) => (
-                        <View key={idx} style={styles.orderItemRow}>
-                            <Image source={{ uri: item.product.images[0] }} style={styles.itemThumb} />
-                            <View style={styles.itemInfo}>
-                                <Text style={styles.itemBrand}>{item.product.brand}</Text>
-                                <Text style={styles.itemName}>{item.product.name}</Text>
-                                <Text style={styles.itemSpecs}>
-                                    Color: {item.selectedColor.name} | Qty: {item.quantity}
-                                </Text>
-                            </View>
-                            <Text style={styles.itemPrice}>
-                                {formatPrice(item.product.price * item.quantity)}
-                            </Text>
-                        </View>
-                    ))}
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total Paid</Text>
-                        <Text style={styles.summaryTotal}>{formatPrice(activeOrder.total)}</Text>
-                    </View>
-                    <Text style={styles.paymentMethodInfo}>
-                        Paid via {activeOrder.paymentMethod.toUpperCase()} • Shipping to {activeOrder.shippingAddress.address}, {activeOrder.shippingAddress.city}
-                    </Text>
-                </View>
-
-                {/* Action Button */}
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => navigateTo('shop')}>
-                    <Text style={styles.primaryBtnText}>CONTINUE SHOPPING</Text>
-                    <Feather name="shopping-bag" size={18} color="#ffffff" />
+                <TouchableOpacity style={styles.primaryButton} onPress={() => navigateTo(paid ? 'account' : 'shop')}>
+                    <Text style={styles.primaryButtonText}>{paid ? 'OUVRIR MES LIVRES' : 'RETOURNER À LA BOUTIQUE'}</Text>
+                    <Feather name={paid ? 'book-open' : 'book'} size={17} color="#ffffff" />
                 </TouchableOpacity>
+                {!paid && (
+                    <Text style={styles.note}>Le statut de votre commande sera mis à jour après validation par PayDunya.</Text>
+                )}
             </ScrollView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    scrollContent: {
-        paddingHorizontal: 24,
-        paddingVertical: 20,
-        maxWidth: 800,
-        alignSelf: 'center',
-        width: '100%',
-    },
-    errorContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    errorText: {
-        fontSize: 16,
-        color: '#64748b',
-        marginTop: 20,
-        marginBottom: 16,
-    },
-    successHeaderCard: {
-        backgroundColor: '#ffc5d3',
-        borderRadius: 24,
-        padding: 32,
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    checkCircle: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#111111',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 16,
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-    },
-    thankYouText: {
-        fontSize: 26,
-        fontWeight: '900',
-        color: '#0f172a',
-        letterSpacing: -0.5,
-    },
-    orderIdText: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#8b72e6',
-        marginTop: 4,
-    },
-    estimatedText: {
-        fontSize: 14,
-        color: '#334155',
-        marginTop: 10,
-        fontWeight: '600',
-    },
-    estHighlight: {
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    sectionCard: {
-        backgroundColor: '#f8fafc',
-        borderRadius: 24,
-        padding: 24,
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: '#f1f5f9',
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '900',
-        color: '#0f172a',
-        marginBottom: 16,
-    },
-    timelineWrapper: {
-        paddingLeft: 8,
-    },
-    stepItem: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        minHeight: 54,
-    },
-    stepIndicatorCol: {
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    stepDot: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#e2e8f0',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 2,
-    },
-    stepDotDone: {
-        backgroundColor: '#8b72e6',
-    },
-    stepLine: {
-        width: 2,
-        flex: 1,
-        backgroundColor: '#e2e8f0',
-        marginVertical: 4,
-    },
-    stepLineDone: {
-        backgroundColor: '#8b72e6',
-    },
-    stepTextCol: {
-        paddingTop: 2,
-    },
-    stepLabel: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#94a3b8',
-    },
-    stepLabelDone: {
-        color: '#0f172a',
-    },
-    stepDesc: {
-        fontSize: 12,
-        color: '#64748b',
-        marginTop: 2,
-    },
-    orderItemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    itemThumb: {
-        width: 54,
-        height: 64,
-        borderRadius: 12,
-        backgroundColor: '#cbd5e1',
-    },
-    itemInfo: {
-        flex: 1,
-        marginLeft: 14,
-    },
-    itemBrand: {
-        fontSize: 10,
-        fontWeight: '800',
-        color: '#8b72e6',
-        textTransform: 'uppercase',
-    },
-    itemName: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#0f172a',
-    },
-    itemSpecs: {
-        fontSize: 11,
-        color: '#64748b',
-        marginTop: 2,
-    },
-    itemPrice: {
-        fontSize: 14,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#cbd5e1',
-        marginVertical: 14,
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    summaryLabel: {
-        fontSize: 16,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    summaryTotal: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    paymentMethodInfo: {
-        fontSize: 12,
-        color: '#64748b',
-        marginTop: 6,
-    },
-    primaryBtn: {
-        backgroundColor: '#111111',
-        borderRadius: 16,
-        paddingVertical: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        marginBottom: 32,
-    },
-    primaryBtnText: {
-        color: '#ffffff',
-        fontSize: 14,
-        fontWeight: '900',
-        letterSpacing: 0.5,
-    },
+    container: { flex: 1, backgroundColor: '#f8fafc' },
+    content: { width: '100%', maxWidth: 700, alignSelf: 'center', padding: 22, paddingTop: 54 },
+    successCard: { alignItems: 'center', backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 24, padding: 32 },
+    check: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#6d28d9', alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
+    title: { color: '#0f172a', fontSize: 25, fontWeight: '900', textAlign: 'center' },
+    subtitle: { color: '#64748b', fontSize: 14, lineHeight: 22, textAlign: 'center', maxWidth: 490, marginTop: 10 },
+    orderId: { color: '#6d28d9', fontSize: 12, fontWeight: '800', marginTop: 16 },
+    primaryButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9, backgroundColor: '#6d28d9', borderRadius: 13, paddingVertical: 15, marginTop: 18 },
+    primaryButtonText: { color: '#ffffff', fontWeight: '900', fontSize: 12 },
+    note: { color: '#64748b', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 14 },
 });

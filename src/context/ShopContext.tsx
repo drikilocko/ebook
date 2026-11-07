@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Product, CartItem, FilterState, CurrencyCode, Currency, Order, User } from '../types';
 import { PRODUCTS, CATEGORIES, CURRENCIES } from '../data/mockData';
 import { getErrorMessage, isExpiredJwtError, supabase } from '../lib/supabase';
+import { checkPayDunyaOrderStatus } from '../lib/paydunya';
+import { translateText, useLanguage } from './LanguageContext';
 
-type ScreenName = 'shop' | 'product-detail' | 'cart' | 'checkout' | 'order-success' | 'wishlist' | 'admin' | 'account' | 'explore';
+type ScreenName = 'shop' | 'product-detail' | 'cart' | 'checkout' | 'order-success' | 'wishlist' | 'admin' | 'account' | 'explore' | 'reader';
 
 interface ShopContextType {
     products: Product[];
@@ -11,6 +14,8 @@ interface ShopContextType {
     wishlist: string[];
     activeScreen: ScreenName;
     selectedProduct: Product | null;
+    selectedBook: Product | null;
+    selectedBookOrderId: string | null;
     currency: Currency;
     setCurrencyCode: (code: CurrencyCode) => void;
     filterState: FilterState;
@@ -45,6 +50,10 @@ interface ShopContextType {
     applyPromoCode: (code: string) => { success: boolean; message: string };
     removePromoCode: () => void;
     placeOrder: (shippingInfo: Order['shippingAddress'], paymentMethod: Order['paymentMethod']) => Promise<Order | null>;
+    confirmOrderPayment: (orderId: string) => Promise<Order['paymentStatus']>;
+    openBook: (product: Product, orderId: string) => void;
+    getEbookUrl: (orderId: string, productId: string, download?: boolean) => Promise<string>;
+    updateOrderPaymentMethod: (orderId: string, paymentMethod: Order['paymentMethod']) => Promise<void>;
     updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
     addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
     deleteProduct: (productId: string) => Promise<void>;
@@ -66,8 +75,10 @@ const initialFilterState: FilterState = {
 };
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
+const CURRENCY_STORAGE_KEY = '@zone-de-papy/currency';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { language } = useLanguage();
     const [user, setUser] = useState<User | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [backendError, setBackendError] = useState<string | null>(null);
@@ -154,9 +165,37 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [activeScreen, setActiveScreen] = useState<ScreenName>('shop');
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(PRODUCTS[0]);
     const [currency, setCurrency] = useState<Currency>(CURRENCIES[0]);
+    const currencyChangedDuringLoad = useRef(false);
     const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
-    const [appliedPromo, setAppliedPromo] = useState<string | null>('PAPY20');
+    const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
     const [activeOrder, setActiveOrder] = useState<Order | null>(null);
+    const [selectedBook, setSelectedBook] = useState<Product | null>(null);
+    const [selectedBookOrderId, setSelectedBookOrderId] = useState<string | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        AsyncStorage.getItem(CURRENCY_STORAGE_KEY)
+            .then((savedCode) => {
+                if (!mounted || currencyChangedDuringLoad.current) return;
+                if (savedCode) {
+                    const savedCurrency = CURRENCIES.find((item) => item.code === savedCode);
+                    if (savedCurrency) {
+                        setCurrency(savedCurrency);
+                        return;
+                    }
+                }
+                // When in French mode, default currency to FCFA
+                if (language === 'fr') {
+                    setCurrency(CURRENCIES[0]);
+                }
+            })
+            .catch((error: unknown) => {
+                console.error('Unable to load saved currency preference.', error);
+            });
+        return () => {
+            mounted = false;
+        };
+    }, [language]);
 
     useEffect(() => {
         let mounted = true;
@@ -192,6 +231,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     items: row.items as CartItem[],
                     shippingAddress: row.shipping_address as Order['shippingAddress'],
                     paymentMethod: row.payment_method as Order['paymentMethod'],
+                    paymentStatus: row.payment_status === 'paid' && row.payment_verified !== true
+                        ? 'unverified'
+                        : row.payment_status === 'initiating'
+                        || row.payment_status === 'paid'
+                        || row.payment_status === 'failed'
+                        || row.payment_status === 'unverified'
+                        ? row.payment_status
+                        : 'pending',
+                    paymentVerified: row.payment_verified === true,
                     estimatedDelivery: row.estimated_delivery,
                 } as Order)));
                 setWishlist((wishlistRows || []).map((row) => row.product_id));
@@ -257,7 +305,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const setCurrencyCode = (code: CurrencyCode) => {
         const found = CURRENCIES.find((c) => c.code === code);
-        if (found) setCurrency(found);
+        if (!found) return;
+        currencyChangedDuringLoad.current = true;
+        setCurrency(found);
+        AsyncStorage.setItem(CURRENCY_STORAGE_KEY, code).catch((error: unknown) => {
+            console.error('Unable to save selected currency.', error);
+        });
     };
 
     const navigateTo = (screen: ScreenName) => {
@@ -270,6 +323,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const openProductDetail = (product: Product) => {
         setSelectedProduct(product);
         navigateTo('product-detail');
+        if (!user) setShowAuthModal(true);
     };
 
     const addToCart = (
@@ -277,6 +331,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         color?: { name: string; hex: string },
         qty: number = 1
     ) => {
+        if (!user) {
+            setShowAuthModal(true);
+            return;
+        }
         const chosenColor = color || product.colors[0];
 
         setCart((prev) => {
@@ -361,9 +419,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const clean = code.trim().toUpperCase();
         if (clean === 'PAPY20' || clean === '20100' || clean === 'SALE20' || clean === 'WEARISM20') {
             setAppliedPromo(clean);
-            return { success: true, message: '$20 discount applied!' };
+            const message = language === 'fr'
+                ? `${formatPrice(20)} de réduction appliquée !`
+                : `${formatPrice(20)} discount applied!`;
+            return { success: true, message };
         }
-        return { success: false, message: 'Invalid coupon code. Try code: PAPY20' };
+        return {
+            success: false,
+            message: translateText('Invalid coupon code. Try code: PAPY20', language),
+        };
     };
 
     const removePromoCode = () => {
@@ -378,15 +442,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     }, [cart]);
 
-    const discount = useMemo(() => {
-        if (!appliedPromo) return 0;
-        return cartSubtotal >= 50 ? 20 : 0;
-    }, [appliedPromo, cartSubtotal]);
-
-    const shippingCost = useMemo(() => {
-        if (cartSubtotal === 0) return 0;
-        return cartSubtotal >= 100 || appliedPromo === 'PAPY20' ? 0 : 15;
-    }, [cartSubtotal, appliedPromo]);
+    const discount = 0;
+    const shippingCost = 0;
 
     const cartTotal = useMemo(() => {
         const total = cartSubtotal - discount + shippingCost;
@@ -394,11 +451,19 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [cartSubtotal, discount, shippingCost]);
 
     const formatPrice = (amountInUSD: number) => {
-        const converted = amountInUSD * currency.rate;
+        const converted = Math.round(amountInUSD * currency.rate);
         if (currency.code === 'FCFA') {
-            return `${Math.round(converted).toLocaleString()} FCFA`;
+            const locale = language === 'fr' ? 'fr-FR' : 'en-US';
+            const formatted = converted.toLocaleString(locale);
+            return `${formatted} FCFA`;
         }
-        return `${currency.symbol}${converted.toFixed(2)}`;
+        const locale = language === 'fr' ? 'fr-FR' : 'en-US';
+        return new Intl.NumberFormat(locale, {
+            style: 'currency',
+            currency: currency.code,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(amountInUSD * currency.rate);
     };
 
     const resetFilters = () => {
@@ -407,6 +472,69 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const [productList, setProductList] = useState<Product[]>(PRODUCTS);
     const [orders, setOrders] = useState<Order[]>([]);
+
+    const openBook = (product: Product, orderId: string) => {
+        if (!user) {
+            setShowAuthModal(true);
+            return;
+        }
+        setSelectedBook(product);
+        setSelectedBookOrderId(orderId);
+        navigateTo('reader');
+    };
+
+    const getEbookUrl = async (orderId: string, productId: string, download = false) => {
+        if (!user) {
+            setShowAuthModal(true);
+            throw new Error('Connectez-vous pour accéder à vos livres.');
+        }
+        const order = orders.find((item) => item.id === orderId && item.paymentStatus === 'paid' && item.paymentVerified);
+        const purchasedProduct = order?.items.find((item) => item.product.id === productId)?.product;
+        if (!purchasedProduct) {
+            throw new Error('Ce livre n’est pas disponible dans vos achats confirmés.');
+        }
+        if (!purchasedProduct.ebookStoragePath) {
+            throw new Error('Le fichier de ce livre n’est pas encore disponible. Contactez le support.');
+        }
+        const { data, error } = await supabase.storage
+            .from('ebooks')
+            .createSignedUrl(purchasedProduct.ebookStoragePath, 300, download ? { download: true } : undefined);
+        if (error) {
+            reportBackendError(error);
+            throw error;
+        }
+        return data.signedUrl;
+    };
+
+    const confirmOrderPayment = async (orderId: string): Promise<Order['paymentStatus']> => {
+        if (!user) {
+            setShowAuthModal(true);
+            throw new Error('Connectez-vous pour vérifier votre paiement.');
+        }
+        const result = await checkPayDunyaOrderStatus(orderId);
+        if (!result.success) throw new Error(result.error || 'Impossible de vérifier le paiement.');
+        if (!result.status) throw new Error('Le service de paiement n’a pas renvoyé le statut de la commande.');
+        const paymentStatus = result.status;
+        setOrders((current) => current.map((order) => order.id === orderId
+            ? {
+                ...order,
+                paymentStatus,
+                paymentVerified: paymentStatus === 'paid',
+                ...(paymentStatus === 'paid' ? { status: 'processing' as const } : {}),
+            }
+            : order));
+        if (activeOrder?.id === orderId) {
+            setActiveOrder((current) => current
+                ? {
+                    ...current,
+                    paymentStatus,
+                    paymentVerified: paymentStatus === 'paid',
+                    ...(paymentStatus === 'paid' ? { status: 'processing' as const } : {}),
+                }
+                : null);
+        }
+        return paymentStatus;
+    };
 
     const updateOrderStatus = async (orderId: string, status: Order['status']) => {
         clearBackendError();
@@ -419,6 +547,31 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (activeOrder && activeOrder.id === orderId) {
             setActiveOrder((prev) => (prev ? { ...prev, status } : null));
         }
+    };
+
+    const updateOrderPaymentMethod = async (orderId: string, paymentMethod: Order['paymentMethod']) => {
+        clearBackendError();
+        if (!user) {
+            setShowAuthModal(true);
+            throw new Error('Connectez-vous pour modifier le mode de paiement de la commande.');
+        }
+
+        const { error } = await supabase
+            .from('orders')
+            .update({ payment_method: paymentMethod })
+            .eq('id', orderId)
+            .eq('user_id', user.id);
+        if (error) {
+            reportBackendError(error);
+            throw error;
+        }
+
+        setOrders((prev) => prev.map((order) => (
+            order.id === orderId ? { ...order, paymentMethod } : order
+        )));
+        setActiveOrder((currentOrder) => (
+            currentOrder?.id === orderId ? { ...currentOrder, paymentMethod } : currentOrder
+        ));
     };
 
     const addProduct = async (newP: Omit<Product, 'id'>) => {
@@ -456,7 +609,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const newOrder: Order = {
-            id: `PAPY-${Math.floor(100000 + Math.random() * 900000)}`,
+            id: `PAPY-${Date.now()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
             date: new Date().toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -471,7 +624,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             shippingAddress: shippingInfo,
             paymentMethod,
             status: 'placed',
-            estimatedDelivery: 'Demain avant 17h (Express Gratuit)',
+            paymentStatus: 'initiating',
+            paymentVerified: false,
         };
 
         const { error } = await supabase.from('orders').insert({
@@ -487,7 +641,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             shipping_address: shippingInfo,
             payment_method: newOrder.paymentMethod,
             status: newOrder.status,
-            estimated_delivery: newOrder.estimatedDelivery,
+            estimated_delivery: null,
+            payment_status: newOrder.paymentStatus,
         });
         if (error) {
             reportBackendError(error);
@@ -497,11 +652,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOrders((prev) => [newOrder, ...prev]);
         setCart([]); // Vide le panier après commande réussie
 
-        // Pour TMoney/Flooz → ne pas naviguer tout de suite (PayDunya confirme async)
-        const isMobileMoney = paymentMethod === 'tmoney' || paymentMethod === 'flooz';
-        if (!isMobileMoney) {
-            navigateTo('order-success');
-        }
         return newOrder;
     };
 
@@ -514,6 +664,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 wishlist,
                 activeScreen,
                 selectedProduct,
+                selectedBook,
+                selectedBookOrderId,
                 currency,
                 setCurrencyCode,
                 filterState,
@@ -544,6 +696,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 applyPromoCode,
                 removePromoCode,
                 placeOrder,
+                confirmOrderPayment,
+                openBook,
+                getEbookUrl,
+                updateOrderPaymentMethod,
                 updateOrderStatus,
                 addProduct,
                 deleteProduct,

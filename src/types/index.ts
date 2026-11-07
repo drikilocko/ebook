@@ -22,6 +22,8 @@ export interface Product {
     isNewIn?: boolean;
     isBestSeller?: boolean;
     productType?: string;
+    ebookStoragePath?: string;
+    ebookFormat?: 'pdf';
 }
 
 export interface CartItem {
@@ -64,14 +66,16 @@ export interface Order {
     shipping: number;
     total: number;
     currency: CurrencyCode;
-    shippingAddress: {
+    shippingAddress?: {
         fullName: string;
         address: string;
         city: string;
         postalCode: string;
         phone: string;
     };
-    paymentMethod: 'card' | 'apple-pay' | 'paypal' | 'cod' | 'tmoney' | 'flooz';
+    paymentMethod: 'card' | 'apple-pay' | 'paypal' | 'cod' | 'tmoney' | 'flooz' | 'paydunya';
     status: 'placed' | 'processing' | 'shipped' | 'delivered';
-    estimatedDelivery: string;
+    paymentStatus: 'initiating' | 'pending' | 'paid' | 'failed' | 'unverified';
+    paymentVerified: boolean;
+    estimatedDelivery?: string;
 }

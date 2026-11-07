@@ -18,19 +18,19 @@ const SLIDE_INTERVAL = 5000;
 
 const slides = [
     {
-        category: 'SMARTPHONES',
+        category: 'ENTREPRENEURIAT',
         image:
-            'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1600&q=85',
+            'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1600&q=85',
     },
     {
-        category: 'COMPUTERS',
+        category: 'MARKETING DIGITAL',
         image:
-            'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=1600&q=85',
+            'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=1600&q=85',
     },
     {
-        category: 'AUDIO',
+        category: 'FINANCES',
         image:
-            'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1600&q=85',
+            'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=1600&q=85',
     },
 ];
 
@@ -41,12 +41,11 @@ type HeroBannerProps = {
 };
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({ horizontalBleed }) => {
-    const { applyPromoCode, appliedPromo } = useShop();
+    const { setFilterState } = useShop();
     const { width, height } = useWindowDimensions();
     const scrollRef = useRef<ScrollView>(null);
     const activeSlideRef = useRef(0);
     const [activeSlide, setActiveSlide] = useState(0);
-    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -58,12 +57,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ horizontalBleed }) => {
 
         return () => clearInterval(timer);
     }, [width]);
-
-    const handleApplyCode = () => {
-        applyPromoCode('20100');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-    };
 
     const handleSlideChange = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const nextPosition = Math.round(event.nativeEvent.contentOffset.x / width);
@@ -111,29 +104,33 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ horizontalBleed }) => {
                             locations={[0, 0.38, 0.72, 1]}
                             start={{ x: 0, y: 0.5 }}
                             end={{ x: 1, y: 0.5 }}
-                            pointerEvents="none"
-                            style={styles.leftGradient}
+                            style={[styles.leftGradient, { pointerEvents: 'none' }]}
                         />
 
                         <View style={styles.sticker}>
-                            <Text style={styles.stickerText}>SALE</Text>
+                            <Text style={styles.stickerText}>EBOOKS DE FORMATION</Text>
                         </View>
 
                         <View style={[styles.contentWrapper, { width: Math.min(width * 0.72, 640) }]}>
-                            <Text style={styles.categoryText}>{slide.category}</Text>
+                            <TouchableOpacity
+                                onPress={() => setFilterState((prev) => ({ ...prev, category: slide.category }))}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.categoryText}>{slide.category}</Text>
+                            </TouchableOpacity>
                             <Text style={styles.titleText}>
-                                {'$20 OFF $100 PLUS,'}{'\n'}{'GET FREE NEXT-DAY DELIVERY'}
+                                APPRENEZ, PROGRESSEZ,{'\n'}PASSEZ À L’ACTION
                             </Text>
-                            <Text style={styles.subtitleText}>With code: 20100</Text>
+                            <Text style={styles.subtitleText}>
+                                Des formations pratiques en PDF, accessibles dès confirmation du paiement.
+                            </Text>
 
                             <TouchableOpacity
                                 style={styles.okButton}
-                                onPress={handleApplyCode}
+                                onPress={() => setFilterState((prev) => ({ ...prev, category: slide.category }))}
                                 activeOpacity={0.8}
                             >
-                                <Text style={styles.okButtonText}>
-                                    {appliedPromo === '20100' || copied ? 'CODE APPLIED ✓' : 'OK'}
-                                </Text>
+                                <Text style={styles.okButtonText}>DÉCOUVRIR LES LIVRES</Text>
                             </TouchableOpacity>
                         </View>
                     </ImageBackground>

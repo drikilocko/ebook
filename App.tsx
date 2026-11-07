@@ -29,7 +29,9 @@ import { WishlistScreen } from './src/screens/WishlistScreen';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { ExploreScreen } from './src/screens/ExploreScreen';
+import { EbookReaderScreen } from './src/screens/EbookReaderScreen';
 import { LanguageProvider } from './src/context/LanguageContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 
 const MainNavigator: React.FC = () => {
     const { activeScreen } = useShop();
@@ -52,6 +54,8 @@ const MainNavigator: React.FC = () => {
                 return <AccountScreen />;
             case 'explore':
                 return <ExploreScreen />;
+            case 'reader':
+                return <EbookReaderScreen />;
             case 'shop':
             default:
                 return <ShopScreen />;
@@ -81,12 +85,14 @@ export default function App() {
 
     return (
         <LanguageProvider>
-            <ShopProvider>
-                <SafeAreaView style={styles.safeArea}>
-                    <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-                    <MainNavigator />
-                </SafeAreaView>
-            </ShopProvider>
+            <ThemeProvider>
+                <ShopProvider>
+                    <SafeAreaView style={styles.safeArea}>
+                        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+                        <MainNavigator />
+                    </SafeAreaView>
+                </ShopProvider>
+            </ThemeProvider>
         </LanguageProvider>
     );
 }

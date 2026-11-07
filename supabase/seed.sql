@@ -1,15 +1,142 @@
 delete from public.products
-where data->>'category' not in ('SMARTPHONES', 'COMPUTERS', 'AUDIO', 'ACCESSORIES', 'GAMING')
-   or data->>'category' is null;
+where data->>'category' not in (
+    'ENTREPRENEURIAT',
+    'MARKETING DIGITAL',
+    'FINANCES',
+    'DEVELOPPEMENT PERSONNEL',
+    'COMPETENCES NUMERIQUES'
+)
+or data->>'category' is null;
 
 insert into public.products (id, data)
 values
-    ('electronics-phone-01', '{"id":"electronics-phone-01","name":"Nova X Pro Smartphone","category":"SMARTPHONES","brand":"Zone de Papy Tech","price":799,"originalPrice":899,"rating":4.9,"reviewsCount":142,"images":["https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#18181b"},{"name":"Silver","hex":"#d1d5db"},{"name":"Blue","hex":"#2563eb"}],"description":"A powerful smartphone with a vivid display, pro-grade camera system, and all-day battery life.","specifications":"256 GB storage • 6.7-inch OLED display • 5G • 50 MP camera • USB-C fast charging","isNewIn":true,"isBestSeller":true,"productType":"Smartphone"}'::jsonb),
-    ('electronics-laptop-01', '{"id":"electronics-laptop-01","name":"AirBook 14 Laptop","category":"COMPUTERS","brand":"Zone de Papy Tech","price":1099,"originalPrice":1249,"rating":4.8,"reviewsCount":98,"images":["https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Silver","hex":"#d1d5db"},{"name":"Space Gray","hex":"#4b5563"}],"description":"A light, fast laptop designed for work, study, and creative projects on the go.","specifications":"14-inch display • 16 GB RAM • 512 GB SSD • Wi-Fi 6 • Up to 15-hour battery","isNewIn":true,"productType":"Laptop"}'::jsonb),
-    ('electronics-headphones-01', '{"id":"electronics-headphones-01","name":"Studio Wireless Headphones","category":"AUDIO","brand":"Zone de Papy Audio","price":249,"originalPrice":299,"rating":4.7,"reviewsCount":64,"images":["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#111827"},{"name":"White","hex":"#f8fafc"}],"description":"Enjoy immersive sound and comfortable listening with wireless noise isolation.","specifications":"Bluetooth 5.3 • Active noise cancellation • 30-hour battery • Built-in microphone","productType":"Headphones"}'::jsonb),
-    ('electronics-watch-01', '{"id":"electronics-watch-01","name":"Pulse Smartwatch","category":"ACCESSORIES","brand":"Zone de Papy Wearables","price":189,"originalPrice":229,"rating":4.8,"reviewsCount":210,"images":["https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#111827"},{"name":"Silver","hex":"#d1d5db"}],"description":"Track your activity, check notifications, and stay connected from your wrist.","specifications":"1.8-inch touchscreen • Heart-rate tracking • Water resistant • 7-day battery","isBestSeller":true,"productType":"Smartwatch"}'::jsonb),
-    ('electronics-tablet-01', '{"id":"electronics-tablet-01","name":"Vision 11 Tablet","category":"COMPUTERS","brand":"Zone de Papy Tech","price":499,"originalPrice":549,"rating":4.6,"reviewsCount":88,"images":["https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1561154464-82e9adf32764?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Gray","hex":"#6b7280"},{"name":"Blue","hex":"#2563eb"}],"description":"A versatile tablet for video, reading, and productivity with a bright, spacious display.","specifications":"11-inch display • 128 GB storage • Wi-Fi • USB-C • All-day battery","isNewIn":true,"productType":"Tablet"}'::jsonb),
-    ('electronics-speaker-01', '{"id":"electronics-speaker-01","name":"Boom Portable Bluetooth Speaker","category":"AUDIO","brand":"Zone de Papy Audio","price":129,"originalPrice":159,"rating":4.85,"reviewsCount":115,"images":["https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1589003077984-894e133dabab?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#111827"},{"name":"Red","hex":"#dc2626"}],"description":"Take your music anywhere with room-filling sound in a compact, portable speaker.","specifications":"Bluetooth 5.2 • 12-hour battery • Water resistant • USB-C charging","productType":"Speaker"}'::jsonb),
-    ('electronics-camera-01', '{"id":"electronics-camera-01","name":"Capture 4K Digital Camera","category":"ACCESSORIES","brand":"Zone de Papy Imaging","price":649,"originalPrice":749,"rating":4.92,"reviewsCount":175,"images":["https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1502920917128-1aa500764cbd?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#111827"}],"description":"Capture detailed photos and smooth video with a compact camera made for everyday adventures.","specifications":"24 MP sensor • 4K video • Wi-Fi • Rechargeable battery • SD card compatible","isBestSeller":true,"productType":"Camera"}'::jsonb),
-    ('electronics-gaming-01', '{"id":"electronics-gaming-01","name":"NextPlay Wireless Controller","category":"GAMING","brand":"Zone de Papy Gaming","price":79,"originalPrice":99,"rating":4.88,"reviewsCount":89,"images":["https://images.unsplash.com/photo-1592840496694-26d035b52b48?auto=format&fit=crop&w=800&q=80","https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?auto=format&fit=crop&w=800&q=80"],"colors":[{"name":"Black","hex":"#111827"},{"name":"White","hex":"#f8fafc"}],"description":"A responsive wireless controller with comfortable grips for gaming at home or on the go.","specifications":"Bluetooth wireless • Rechargeable • Ergonomic grip • USB-C charging","isNewIn":true,"productType":"Gaming"}'::jsonb)
+    ('formation-entreprendre', jsonb_build_object(
+        'name', 'Lancer son activité avec méthode',
+        'category', 'ENTREPRENEURIAT',
+        'brand', 'Formation pratique',
+        'price', 12,
+        'originalPrice', 18,
+        'rating', 4.9,
+        'reviewsCount', 126,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Un guide concret pour transformer une idée en activité viable : étude de marché, offre, prix, premiers clients et plan d’action.',
+        'specifications', 'PDF • 8 modules • Exercices pratiques • Accès à vie',
+        'isBestSeller', true,
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/lancer-son-activite.pdf'
+    )),
+    ('formation-marketing', jsonb_build_object(
+        'name', 'Le marketing digital pour débuter',
+        'category', 'MARKETING DIGITAL',
+        'brand', 'Formation pratique',
+        'price', 10,
+        'rating', 4.8,
+        'reviewsCount', 94,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Apprenez à définir votre audience, créer du contenu utile et choisir les bons canaux pour faire connaître votre activité.',
+        'specifications', 'PDF • 6 modules • Modèles de contenu • Accès à vie',
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/marketing-digital-debutant.pdf'
+    )),
+    ('formation-reseaux-sociaux', jsonb_build_object(
+        'name', 'Vendre grâce aux réseaux sociaux',
+        'category', 'MARKETING DIGITAL',
+        'brand', 'Formation pratique',
+        'price', 9,
+        'originalPrice', 14,
+        'rating', 4.7,
+        'reviewsCount', 81,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Construisez une présence cohérente, préparez un calendrier éditorial et transformez vos échanges en ventes.',
+        'specifications', 'PDF • 5 modules • Calendrier éditorial • Accès à vie',
+        'isNewIn', true,
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/vendre-reseaux-sociaux.pdf'
+    )),
+    ('formation-budget', jsonb_build_object(
+        'name', 'Gérer son budget et épargner',
+        'category', 'FINANCES',
+        'brand', 'Formation pratique',
+        'price', 8,
+        'rating', 4.9,
+        'reviewsCount', 117,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Des outils simples pour suivre vos dépenses, établir un budget réaliste et construire une épargne adaptée à vos objectifs.',
+        'specifications', 'PDF • 7 modules • Tableaux de suivi • Accès à vie',
+        'isBestSeller', true,
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/gerer-budget-epargner.pdf'
+    )),
+    ('formation-freelance', jsonb_build_object(
+        'name', 'Devenir freelance et trouver ses clients',
+        'category', 'ENTREPRENEURIAT',
+        'brand', 'Formation pratique',
+        'price', 14,
+        'originalPrice', 19,
+        'rating', 4.8,
+        'reviewsCount', 73,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Positionnez vos services, fixez vos tarifs, préparez votre proposition commerciale et organisez vos premières missions.',
+        'specifications', 'PDF • 9 modules • Modèle de proposition • Accès à vie',
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/devenir-freelance.pdf'
+    )),
+    ('formation-productivite', jsonb_build_object(
+        'name', 'S’organiser et atteindre ses objectifs',
+        'category', 'DEVELOPPEMENT PERSONNEL',
+        'brand', 'Formation pratique',
+        'price', 7,
+        'rating', 4.6,
+        'reviewsCount', 59,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Une méthode accessible pour clarifier vos priorités, planifier vos semaines et avancer régulièrement sur vos projets.',
+        'specifications', 'PDF • 5 modules • Fiches d’exercices • Accès à vie',
+        'isNewIn', true,
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/organisation-objectifs.pdf'
+    )),
+    ('formation-outils-numeriques', jsonb_build_object(
+        'name', 'Les outils numériques essentiels',
+        'category', 'COMPETENCES NUMERIQUES',
+        'brand', 'Formation pratique',
+        'price', 11,
+        'rating', 4.7,
+        'reviewsCount', 62,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Découvrez les outils essentiels pour collaborer, organiser vos documents, communiquer et sécuriser vos comptes en ligne.',
+        'specifications', 'PDF • 6 modules • Liste d’outils • Accès à vie',
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/outils-numeriques-essentiels.pdf'
+    )),
+    ('formation-ia', jsonb_build_object(
+        'name', 'Bien utiliser l’intelligence artificielle',
+        'category', 'COMPETENCES NUMERIQUES',
+        'brand', 'Formation pratique',
+        'price', 13,
+        'originalPrice', 17,
+        'rating', 4.9,
+        'reviewsCount', 105,
+        'images', jsonb_build_array('https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=85'),
+        'colors', jsonb_build_array(jsonb_build_object('name', 'Ebook PDF', 'hex', '#6d28d9')),
+        'description', 'Apprenez à formuler de bonnes demandes, vérifier les réponses et intégrer l’IA à vos tâches de création et de gestion.',
+        'specifications', 'PDF • 8 modules • Exemples de prompts • Accès à vie',
+        'isNewIn', true,
+        'productType', 'Ebook de formation',
+        'ebookFormat', 'pdf',
+        'ebookStoragePath', 'formations/utiliser-intelligence-artificielle.pdf'
+    ))
 on conflict (id) do update set data = excluded.data;

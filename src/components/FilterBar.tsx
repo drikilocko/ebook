@@ -1,220 +1,76 @@
-import React, { useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { LocalizedText as Text } from '../context/LanguageContext';
+import React from 'react';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { LocalizedText as Text } from '../context/LanguageContext';
 import { useShop } from '../context/ShopContext';
-import { FilterModal } from './FilterModal';
+import { CATEGORIES } from '../data/mockData';
 
 interface FilterBarProps {
     onToggleCompactView?: () => void;
     isCompactView?: boolean;
 }
 
-export const FilterBar: React.FC<FilterBarProps> = ({
-    onToggleCompactView,
-    isCompactView,
-}) => {
-    const { filterState, setFilterState, resetFilters } = useShop();
-    const [isModalVisible, setIsModalVisible] = useState(false);
-
-    const activeCategoryTitle =
-        filterState.category === 'ALL'
-            ? 'ALL PRODUCTS'
-            : filterState.category;
-
-    const handleSortToggle = () => {
-        const options: ('featured' | 'price-low' | 'price-high' | 'rating' | 'newest')[] = [
-            'featured',
-            'price-low',
-            'price-high',
-            'rating',
-            'newest',
-        ];
-        const currentIndex = options.indexOf(filterState.sortBy);
-        const nextIndex = (currentIndex + 1) % options.length;
-        setFilterState((prev) => ({ ...prev, sortBy: options[nextIndex] }));
+export const FilterBar: React.FC<FilterBarProps> = ({ onToggleCompactView, isCompactView }) => {
+    const { filterState, setFilterState } = useShop();
+    const sortOptions: { key: typeof filterState.sortBy; label: string }[] = [
+        { key: 'featured', label: 'À la une' },
+        { key: 'newest', label: 'Nouveautés' },
+        { key: 'price-low', label: 'Prix croissant' },
+        { key: 'price-high', label: 'Prix décroissant' },
+        { key: 'rating', label: 'Mieux notés' },
+    ];
+    const nextSort = () => {
+        const index = sortOptions.findIndex((option) => option.key === filterState.sortBy);
+        const option = sortOptions[(index + 1) % sortOptions.length];
+        setFilterState((state) => ({ ...state, sortBy: option.key }));
     };
-
-    const getSortLabel = () => {
-        switch (filterState.sortBy) {
-            case 'price-low':
-                return 'Price: Low-High';
-            case 'price-high':
-                return 'Price: High-Low';
-            case 'rating':
-                return 'Top Rated';
-            case 'newest':
-                return 'Newest Arrivals';
-            default:
-                return 'Sort';
-        }
-    };
-
-    const activeFiltersCount = [
-        filterState.productType !== 'ALL',
-        filterState.selectedColor !== 'ALL',
-        filterState.maxPrice < 2000,
-    ].filter(Boolean).length;
+    const selectedSort = sortOptions.find((option) => option.key === filterState.sortBy) ?? sortOptions[0];
 
     return (
         <View style={styles.container}>
-            {/* Category Header */}
-            <View style={styles.headerRow}>
+            <View style={styles.headingRow}>
                 <View>
-                    <Text style={styles.categoryTitle}>{activeCategoryTitle}</Text>
-                    <Text style={styles.subTitle}>View more</Text>
+                    <Text style={styles.title}>Nos ebooks de formation</Text>
+                    <Text style={styles.subtitle}>Des connaissances concrètes pour passer à l’action.</Text>
                 </View>
-
-                {activeFiltersCount > 0 && (
-                    <TouchableOpacity onPress={resetFilters} style={styles.resetButton}>
-                        <Text style={styles.resetText}>Reset Filters ({activeFiltersCount})</Text>
-                        <Feather name="x" size={14} color="#111111" />
+                {onToggleCompactView && (
+                    <TouchableOpacity style={styles.viewButton} onPress={onToggleCompactView}>
+                        <Feather name={isCompactView ? 'grid' : 'layout'} size={17} color="#6d28d9" />
                     </TouchableOpacity>
                 )}
             </View>
-
-            {/* Pill Filter Bar */}
-            <View style={styles.filterRow}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillsScroll}>
-                    {/* Sort Pill */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {CATEGORIES.map((category) => (
                     <TouchableOpacity
-                        style={[styles.pill, filterState.sortBy !== 'featured' && styles.pillActive]}
-                        onPress={handleSortToggle}
-                        activeOpacity={0.7}
+                        key={category.id}
+                        style={[styles.chip, filterState.category === category.id && styles.chipActive]}
+                        onPress={() => setFilterState((state) => ({ ...state, category: category.id }))}
                     >
-                        <Feather name="sliders" size={14} color={filterState.sortBy !== 'featured' ? '#ffffff' : '#111111'} />
-                        <Text style={[styles.pillText, filterState.sortBy !== 'featured' && styles.pillTextActive]}>
-                            {getSortLabel()}
-                        </Text>
-                        <Feather name="chevron-down" size={12} color="#737373" />
-                    </TouchableOpacity>
-
-                    {/* Product Type Pill */}
-                    <TouchableOpacity
-                        style={[styles.pill, filterState.productType !== 'ALL' && styles.pillActive]}
-                        onPress={() => setIsModalVisible(true)}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={[styles.pillText, filterState.productType !== 'ALL' && styles.pillTextActive]}>
-                            Product type {filterState.productType !== 'ALL' ? `: ${filterState.productType}` : ''}
+                        <Text style={[styles.chipText, filterState.category === category.id && styles.chipTextActive]}>
+                            {category.name}
                         </Text>
                     </TouchableOpacity>
-
-                    {/* Color filter */}
-                    <TouchableOpacity
-                        style={[styles.pill, filterState.selectedColor !== 'ALL' && styles.pillActive]}
-                        onPress={() => setIsModalVisible(true)}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={[styles.pillText, filterState.selectedColor !== 'ALL' && styles.pillTextActive]}>
-                            Colour
-                        </Text>
-                    </TouchableOpacity>
-
-                    {/* Price Range Pill */}
-                    <TouchableOpacity
-                        style={[styles.pill, filterState.maxPrice < 2000 && styles.pillActive]}
-                        onPress={() => setIsModalVisible(true)}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={[styles.pillText, filterState.maxPrice < 2000 && styles.pillTextActive]}>
-                            Price Range {filterState.maxPrice < 2000 ? `< $${filterState.maxPrice}` : ''}
-                        </Text>
-                    </TouchableOpacity>
-                </ScrollView>
-
-                {/* View Layout Toggle Button */}
-                <TouchableOpacity
-                    style={styles.viewToggleButton}
-                    onPress={onToggleCompactView}
-                    activeOpacity={0.7}
-                >
-                    <Feather name={isCompactView ? 'grid' : 'layout'} size={18} color="#ffffff" />
+                ))}
+                <TouchableOpacity style={styles.sortChip} onPress={nextSort}>
+                    <Feather name="sliders" size={13} color="#6d28d9" />
+                    <Text style={styles.sortText}>{selectedSort.label}</Text>
                 </TouchableOpacity>
-            </View>
-
-            {/* Detailed Filter Drawer Modal */}
-            <FilterModal visible={isModalVisible} onClose={() => setIsModalVisible(false)} />
+            </ScrollView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        marginVertical: 16,
-    },
-    headerRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    categoryTitle: {
-        fontSize: 26,
-        fontWeight: '900',
-        color: '#0f172a',
-        letterSpacing: -0.5,
-        textTransform: 'uppercase',
-    },
-    subTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#737373',
-        marginTop: 2,
-    },
-    resetButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: '#f5f5f5',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    resetText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#111111',
-    },
-    filterRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    pillsScroll: {
-        gap: 8,
-        alignItems: 'center',
-        paddingRight: 8,
-    },
-    pill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        backgroundColor: '#ffffff',
-        borderWidth: 1,
-        borderColor: '#d4d4d4',
-    },
-    pillActive: {
-        borderColor: '#111111',
-        backgroundColor: '#111111',
-    },
-    pillText: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#262626',
-    },
-    pillTextActive: {
-        color: '#ffffff',
-    },
-    viewToggleButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: '#111111',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    container: { marginVertical: 22 },
+    headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
+    title: { color: '#0f172a', fontSize: 22, fontWeight: '900' },
+    subtitle: { color: '#64748b', fontSize: 12, marginTop: 4 },
+    viewButton: { width: 38, height: 38, borderRadius: 11, backgroundColor: '#f3e8ff', alignItems: 'center', justifyContent: 'center' },
+    chips: { gap: 8, paddingRight: 8, alignItems: 'center' },
+    chip: { paddingVertical: 9, paddingHorizontal: 13, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
+    chipActive: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
+    chipText: { color: '#475569', fontSize: 10, fontWeight: '800' },
+    chipTextActive: { color: '#ffffff' },
+    sortChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#f3e8ff' },
+    sortText: { color: '#6d28d9', fontSize: 10, fontWeight: '800' },
 });

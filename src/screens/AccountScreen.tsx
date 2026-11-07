@@ -1,288 +1,241 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { LocalizedText as Text, LocalizedTextInput as TextInput, useLanguage } from '../context/LanguageContext';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { useShop } from '../context/ShopContext';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { LocalizedText as Text, useLanguage } from '../context/LanguageContext';
 import { Header } from '../components/Header';
+import { useShop } from '../context/ShopContext';
+import { Order, Product } from '../types';
 import { getErrorMessage } from '../lib/supabase';
 
-export const AccountScreen: React.FC = () => {
-    const { user, logout, orders, navigateTo, formatPrice, saveAddress } = useShop();
+type AccountTab = 'profile' | 'library' | 'orders' | 'settings';
 
-    const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'settings'>('profile');
+type PurchasedBook = {
+    product: Product;
+    orderId: string;
+};
+
+const isEbookOrder = (order: Order) =>
+    order.items.length > 0 && order.items.every((item) => Boolean(item.product.ebookStoragePath));
+
+export const AccountScreen: React.FC = () => {
+    const {
+        user,
+        logout,
+        orders,
+        navigateTo,
+        openBook,
+        getEbookUrl,
+        confirmOrderPayment,
+        formatPrice,
+        currency,
+        setCurrencyCode,
+    } = useShop();
+    const [activeTab, setActiveTab] = useState<AccountTab>('library');
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    const [paymentCheckError, setPaymentCheckError] = useState<string | null>(null);
+    const checkedPaymentOrders = useRef(new Set<string>());
     const { language, setLanguage } = useLanguage();
 
-    // Address edit state
-    const [editingAddress, setEditingAddress] = useState(false);
-    const [savingAddress, setSavingAddress] = useState(false);
-    const [addressError, setAddressError] = useState<string | null>(null);
-    const [savedAddr, setSavedAddr] = useState(
-        user?.savedAddress || {
-            fullName: user?.name || '',
-            address: '',
-            city: '',
-            postalCode: '',
-            phone: '',
-        }
-    );
+    useEffect(() => {
+        orders
+            .filter((order) => (
+                isEbookOrder(order)
+                &&
+                (order.paymentStatus === 'pending' || order.paymentStatus === 'initiating')
+                && ['card', 'paydunya', 'tmoney', 'flooz'].includes(order.paymentMethod)
+            ))
+            .forEach((order) => {
+                if (checkedPaymentOrders.current.has(order.id)) return;
+                checkedPaymentOrders.current.add(order.id);
+                void confirmOrderPayment(order.id).catch((error: unknown) => {
+                    setPaymentCheckError(getErrorMessage(error));
+                });
+            });
+    }, [orders, confirmOrderPayment]);
 
-    const handleSaveAddress = async () => {
-        setAddressError(null);
-        setSavingAddress(true);
-        try {
-            await saveAddress(savedAddr);
-            setEditingAddress(false);
-        } catch (error) {
-            setAddressError(getErrorMessage(error));
-        } finally {
-            setSavingAddress(false);
-        }
-    };
+    const purchasedBooks = useMemo(() => {
+        const books: PurchasedBook[] = [];
+        const seen = new Set<string>();
+        orders
+            .filter((order) => isEbookOrder(order) && order.paymentStatus === 'paid' && order.paymentVerified)
+            .forEach((order) => order.items.forEach((item) => {
+                if (!seen.has(item.product.id)) {
+                    seen.add(item.product.id);
+                    books.push({ product: item.product, orderId: order.id });
+                }
+            }));
+        return books;
+    }, [orders]);
+
+    const ebookOrders = useMemo(() => orders.filter(isEbookOrder), [orders]);
+    const tabs: { id: AccountTab; label: string; icon: keyof typeof Feather.glyphMap }[] = [
+        { id: 'library', label: `MES LIVRES (${purchasedBooks.length})`, icon: 'book-open' },
+        { id: 'orders', label: `ACHATS (${ebookOrders.length})`, icon: 'credit-card' },
+        { id: 'profile', label: 'MON PROFIL', icon: 'user' },
+        { id: 'settings', label: 'PARAMÈTRES', icon: 'settings' },
+    ];
 
     return (
         <View style={styles.container}>
             <Header />
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* User Top Card */}
-                <View style={styles.userCard}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+                <View style={styles.profileCard}>
                     <Image
-                        source={{
-                            uri:
-                                user?.avatar ||
-                                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-                        }}
+                        source={{ uri: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80' }}
                         style={styles.avatar}
                     />
-                    <View style={styles.userInfoCol}>
-                        <View style={styles.nameRow}>
-                            <Text style={styles.userName}>{user?.name || 'Alex Morgan'}</Text>
-                            <View style={styles.vipBadge}>
-                                <Ionicons name="sparkles" size={12} color="#7e22ce" />
-                                <Text style={styles.vipBadgeText}>VIP MEMBER</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.userEmail}>{user?.email || 'alex.morgan@gmail.com'}</Text>
-                        <Text style={styles.loginMethod}>
-                            Logged in via {user?.provider === 'google' ? 'Google Account 🌐' : 'Email & Password ✉️'}
-                        </Text>
+                    <View style={styles.profileInfo}>
+                        <Text style={styles.name}>{user?.name || 'Lecteur'}</Text>
+                        <Text style={styles.email}>{user?.email}</Text>
+                        <Text style={styles.accessNote}>Vos formations achetées, accessibles à vie.</Text>
                     </View>
-
-                    <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-                        <Feather name="log-out" size={16} color="#ef4444" />
-                        <Text style={styles.logoutBtnText}>LOG OUT</Text>
+                    <TouchableOpacity style={styles.logoutButton} onPress={() => void logout()}>
+                        <Feather name="log-out" size={16} color="#b91c1c" />
+                        <Text style={styles.logoutText}>DÉCONNEXION</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Tab Navigation */}
-                <View style={styles.tabRow}>
-                    {[
-                        { id: 'profile', label: 'MY PROFILE', icon: 'user' },
-                        { id: 'orders', label: `ORDERS (${orders.length})`, icon: 'package' },
-                        { id: 'addresses', label: 'ADDRESSES', icon: 'map-pin' },
-                        { id: 'settings', label: 'SETTINGS', icon: 'settings' },
-                    ].map((tab) => (
+                <View style={styles.tabs}>
+                    {tabs.map((tab) => (
                         <TouchableOpacity
                             key={tab.id}
-                            style={[styles.tabChip, activeTab === tab.id && styles.tabChipActive]}
-                            onPress={() => setActiveTab(tab.id as any)}
+                            style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                            onPress={() => setActiveTab(tab.id)}
                         >
-                            <Feather
-                                name={tab.icon as any}
-                                size={14}
-                                color={activeTab === tab.id ? '#ffffff' : '#64748b'}
-                            />
-                            <Text style={[styles.tabChipText, activeTab === tab.id && styles.tabChipTextActive]}>
-                                {tab.label}
-                            </Text>
+                            <Feather name={tab.icon} size={15} color={activeTab === tab.id ? '#ffffff' : '#64748b'} />
+                            <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.label}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
 
-                {/* TAB 1: Profile Summary */}
+                {activeTab === 'library' && (
+                    <View style={styles.section}>
+                        <Text style={styles.heading}>Ma bibliothèque</Text>
+                        <Text style={styles.sectionIntro}>Les livres apparaissent ici dès que le paiement est confirmé.</Text>
+                        {paymentCheckError ? <Text style={styles.downloadError}>{paymentCheckError}</Text> : null}
+                        {purchasedBooks.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Feather name="book" size={35} color="#a78bfa" />
+                                <Text style={styles.emptyTitle}>Votre bibliothèque est vide</Text>
+                                <Text style={styles.emptyText}>Choisissez une formation et retrouvez-la ici après le paiement.</Text>
+                                <TouchableOpacity style={styles.primaryButton} onPress={() => navigateTo('shop')}>
+                                    <Text style={styles.primaryButtonText}>DÉCOUVRIR LES EBOOKS</Text>
+                                    <Feather name="arrow-right" size={16} color="#ffffff" />
+                                </TouchableOpacity>
+                            </View>
+                        ) : purchasedBooks.map(({ product, orderId }) => (
+                            <View key={product.id} style={styles.bookCard}>
+                                <Image source={{ uri: product.images[0] }} style={styles.cover} />
+                                <View style={styles.bookInfo}>
+                                    <Text style={styles.bookCategory}>{product.category}</Text>
+                                    <Text style={styles.bookTitle}>{product.name}</Text>
+                                    <Text style={styles.bookFormat}>Ebook PDF · Accès à vie</Text>
+                                    <View style={styles.bookActions}>
+                                        <TouchableOpacity style={styles.readButton} onPress={() => openBook(product, orderId)}>
+                                            <Feather name="book-open" size={15} color="#ffffff" />
+                                            <Text style={styles.readButtonText}>LIRE</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.downloadButton}
+                                            onPress={async () => {
+                                                setDownloadError(null);
+                                                try {
+                                                    const url = await getEbookUrl(orderId, product.id, true);
+                                                    await Linking.openURL(url);
+                                                } catch (error) {
+                                                    setDownloadError(getErrorMessage(error));
+                                                }
+                                            }}
+                                        >
+                                            <Feather name="download" size={15} color="#6d28d9" />
+                                            <Text style={styles.downloadButtonText}>TÉLÉCHARGER</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    {downloadError ? <Text style={styles.downloadError}>{downloadError}</Text> : null}
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {activeTab === 'orders' && (
+                    <View style={styles.section}>
+                        <Text style={styles.heading}>Historique des achats</Text>
+                        {ebookOrders.length === 0 ? (
+                            <Text style={styles.sectionIntro}>Aucun achat d’ebook pour le moment.</Text>
+                        ) : ebookOrders.map((order) => (
+                            <View key={order.id} style={styles.orderCard}>
+                                <View style={styles.orderTop}>
+                                    <View>
+                                        <Text style={styles.orderNumber}>Achat {order.id}</Text>
+                                        <Text style={styles.orderDate}>{order.date}</Text>
+                                    </View>
+                                    <View style={[styles.status, order.paymentStatus === 'paid' ? styles.paid : order.paymentStatus === 'failed' ? styles.failed : order.paymentStatus === 'unverified' ? styles.unverified : styles.pending]}>
+                                        <Text style={styles.statusText}>
+                                            {order.paymentStatus === 'paid'
+                                                ? 'PAYÉ'
+                                                : order.paymentStatus === 'failed'
+                                                    ? 'ÉCHOUÉ'
+                                                    : order.paymentStatus === 'unverified'
+                                                        ? 'NON VÉRIFIÉ'
+                                                        : order.paymentStatus === 'initiating'
+                                                            ? 'À FINALISER'
+                                                            : 'EN ATTENTE'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                {order.items.map((item) => (
+                                    <View key={item.product.id} style={styles.orderItem}>
+                                        <Text style={styles.orderItemName}>{item.product.name}</Text>
+                                        <Text style={styles.orderItemPrice}>{formatPrice(item.product.price * item.quantity)}</Text>
+                                    </View>
+                                ))}
+                                <View style={styles.orderTotal}>
+                                    <Text style={styles.orderTotalLabel}>Total</Text>
+                                    <Text style={styles.orderTotalPrice}>{formatPrice(order.total)}</Text>
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
                 {activeTab === 'profile' && (
-                    <View style={styles.sectionCard}>
-                        <Text style={styles.sectionTitle}>Account Details & Overview</Text>
-
-                        <View style={styles.detailGrid}>
-                            <View style={styles.detailBox}>
-                                <Text style={styles.detailLabel}>Full Name</Text>
-                                <Text style={styles.detailValue}>{user?.name || 'Alex Morgan'}</Text>
-                            </View>
-
-                            <View style={styles.detailBox}>
-                                <Text style={styles.detailLabel}>Email</Text>
-                                <Text style={styles.detailValue}>{user?.email || 'alex.morgan@gmail.com'}</Text>
-                            </View>
-
-                            <View style={styles.detailBox}>
-                                <Text style={styles.detailLabel}>Member Since</Text>
-                                <Text style={styles.detailValue}>September 2026</Text>
-                            </View>
-
-                            <View style={styles.detailBox}>
-                                <Text style={styles.detailLabel}>Reward Points</Text>
-                                <Text style={styles.detailValueHighlight}>1,450 PAPY Points ⭐</Text>
-                            </View>
+                    <View style={styles.section}>
+                        <Text style={styles.heading}>Mon profil</Text>
+                        <View style={styles.profileDetail}>
+                            <Text style={styles.detailLabel}>Nom</Text>
+                            <Text style={styles.detailValue}>{user?.name}</Text>
                         </View>
-
-                        <TouchableOpacity style={styles.shopNowBtn} onPress={() => navigateTo('shop')}>
-                            <Text style={styles.shopNowBtnText}>EXPLORE NEW ARRIVALS</Text>
-                            <Feather name="arrow-right" size={16} color="#ffffff" />
+                        <View style={styles.profileDetail}>
+                            <Text style={styles.detailLabel}>Adresse e-mail</Text>
+                            <Text style={styles.detailValue}>{user?.email}</Text>
+                        </View>
+                        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigateTo('shop')}>
+                            <Text style={styles.secondaryButtonText}>PARCOURIR LES FORMATIONS</Text>
+                            <Feather name="arrow-right" size={16} color="#6d28d9" />
                         </TouchableOpacity>
                     </View>
                 )}
 
-                {/* TAB 2: Orders History */}
-                {activeTab === 'orders' && (
-                    <View style={styles.sectionCard}>
-                        <Text style={styles.sectionTitle}>Order History & Live Tracking</Text>
-
-                        {orders.length === 0 ? (
-                            <Text style={styles.emptyText}>No orders placed yet.</Text>
-                        ) : (
-                            orders.map((o) => (
-                                <View key={o.id} style={styles.orderCard}>
-                                    <View style={styles.orderHeader}>
-                                        <View>
-                                            <Text style={styles.orderIdText}>Order #{o.id}</Text>
-                                            <Text style={styles.orderDateText}>{o.date}</Text>
-                                        </View>
-                                        <View style={styles.statusBadge}>
-                                            <Text style={styles.statusBadgeText}>{o.status.toUpperCase()}</Text>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.orderItemsList}>
-                                        {o.items.map((it, idx) => (
-                                            <View key={idx} style={styles.orderItemRow}>
-                                                <Image source={{ uri: it.product.images[0] }} style={styles.itemThumb} />
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={styles.itemBrand}>{it.product.brand}</Text>
-                                                    <Text style={styles.itemName}>{it.product.name}</Text>
-                                                    <Text style={styles.itemSpecs}>
-                                                        Qty: {it.quantity}
-                                                    </Text>
-                                                </View>
-                                                <Text style={styles.itemPrice}>{formatPrice(it.product.price * it.quantity)}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-
-                                    <View style={styles.orderFooter}>
-                                        <Text style={styles.totalText}>Total: {formatPrice(o.total)}</Text>
-                                        <TouchableOpacity
-                                            style={styles.trackOrderBtn}
-                                            onPress={() => navigateTo('order-success')}
-                                        >
-                                            <Text style={styles.trackOrderBtnText}>TRACK ORDER</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))
-                        )}
-                    </View>
-                )}
-
-                {/* TAB 3: Saved Addresses */}
-                {activeTab === 'addresses' && (
-                    <View style={styles.sectionCard}>
-                        <View style={styles.cardHeaderRow}>
-                            <Text style={styles.sectionTitle}>Saved Shipping Address</Text>
-                            <TouchableOpacity onPress={() => setEditingAddress(!editingAddress)}>
-                                <Text style={styles.editText}>{editingAddress ? 'CANCEL' : 'EDIT ADDRESS'}</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {editingAddress ? (
-                            <View style={styles.addressForm}>
-                                <View style={styles.inputGroup}>
-                                    <Text style={styles.label}>Recipient Name</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        value={savedAddr.fullName}
-                                        onChangeText={(val) => setSavedAddr({ ...savedAddr, fullName: val })}
-                                    />
-                                </View>
-                                <View style={styles.inputGroup}>
-                                    <Text style={styles.label}>Street Address</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        value={savedAddr.address}
-                                        onChangeText={(val) => setSavedAddr({ ...savedAddr, address: val })}
-                                    />
-                                </View>
-                                <View style={styles.rowForm}>
-                                    <View style={[styles.inputGroup, { flex: 1 }]}>
-                                        <Text style={styles.label}>City</Text>
-                                        <TextInput
-                                            style={styles.input}
-                                            value={savedAddr.city}
-                                            onChangeText={(val) => setSavedAddr({ ...savedAddr, city: val })}
-                                        />
-                                    </View>
-                                    <View style={[styles.inputGroup, { flex: 1 }]}>
-                                        <Text style={styles.label}>Postal Code</Text>
-                                        <TextInput
-                                            style={styles.input}
-                                            value={savedAddr.postalCode}
-                                            onChangeText={(val) => setSavedAddr({ ...savedAddr, postalCode: val })}
-                                        />
-                                    </View>
-                                </View>
-                                {addressError ? <Text style={styles.addressError}>{addressError}</Text> : null}
-                                <TouchableOpacity
-                                    style={styles.saveAddrBtn}
-                                    onPress={handleSaveAddress}
-                                    disabled={savingAddress}
-                                >
-                                    <Text style={styles.saveAddrBtnText}>{savingAddress ? 'SAVING...' : 'SAVE ADDRESS'}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <View style={styles.addressBox}>
-                                <Ionicons name="location" size={20} color="#8b72e6" style={{ marginTop: 2 }} />
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.addrName}>{savedAddr.fullName}</Text>
-                                    <Text style={styles.addrText}>{savedAddr.address}</Text>
-                                    <Text style={styles.addrText}>
-                                        {savedAddr.city}, {savedAddr.postalCode}
-                                    </Text>
-                                    <Text style={styles.addrPhone}>Phone: {savedAddr.phone}</Text>
-                                </View>
-                            </View>
-                        )}
-                    </View>
-                )}
-
-                {/* TAB 4: Settings & Language */}
                 {activeTab === 'settings' && (
-                    <View style={styles.sectionCard}>
-                        <Text style={styles.sectionTitle}>App Preferences & Language</Text>
-
+                    <View style={styles.section}>
+                        <Text style={styles.heading}>Préférences</Text>
+                        <Text style={styles.sectionIntro}>Langue de l’application</Text>
                         <View style={styles.settingRow}>
-                            <View>
-                                <Text style={styles.settingLabel}>Display Language / Langue</Text>
-                                <Text style={styles.settingSub}>Select your preferred interface language</Text>
-                            </View>
-                            <View style={styles.langToggle}>
+                            {(['fr', 'en'] as const).map((option) => (
                                 <TouchableOpacity
-                                    style={[styles.langBtn, language === 'fr' && styles.langBtnActive]}
-                                    onPress={() => setLanguage('fr')}
+                                    key={option}
+                                    style={[styles.settingButton, language === option && styles.settingButtonActive]}
+                                    onPress={() => {
+                                        setLanguage(option);
+                                        if (option === 'fr' && currency.code === 'USD') setCurrencyCode('FCFA');
+                                    }}
                                 >
-                                    <Text style={[styles.langBtnText, language === 'fr' && styles.langBtnTextActive]}>
-                                        🇫🇷 FR
+                                    <Text style={[styles.settingButtonText, language === option && styles.settingButtonTextActive]}>
+                                        {option === 'fr' ? '🇫🇷 Français' : '🇬🇧 English'}
                                     </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-                                    onPress={() => setLanguage('en')}
-                                >
-                                    <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>
-                                        🇬🇧 EN
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            ))}
                         </View>
                     </View>
                 )}
@@ -292,392 +245,65 @@ export const AccountScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    scrollContent: {
-        paddingHorizontal: 24,
-        paddingVertical: 20,
-        maxWidth: 900,
-        alignSelf: 'center',
-        width: '100%',
-    },
-    userCard: {
-        backgroundColor: '#ffc5d3',
-        borderRadius: 24,
-        padding: 24,
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-        flexWrap: 'wrap',
-        gap: 16,
-    },
-    avatar: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        borderWidth: 2,
-        borderColor: '#ffffff',
-    },
-    userInfoCol: {
-        flex: 1,
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    userName: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    vipBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: '#f3e8ff',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 8,
-    },
-    vipBadgeText: {
-        fontSize: 10,
-        fontWeight: '900',
-        color: '#7e22ce',
-    },
-    userEmail: {
-        fontSize: 13,
-        color: '#334155',
-        fontWeight: '600',
-        marginTop: 2,
-    },
-    loginMethod: {
-        fontSize: 11,
-        color: '#475569',
-        marginTop: 4,
-    },
-    logoutBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#ffffff',
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 14,
-    },
-    logoutBtnText: {
-        fontSize: 12,
-        fontWeight: '900',
-        color: '#ef4444',
-    },
-    tabRow: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 20,
-        flexWrap: 'wrap',
-    },
-    tabChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 14,
-        backgroundColor: '#f8fafc',
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    tabChipActive: {
-        backgroundColor: '#111111',
-        borderColor: '#111111',
-    },
-    tabChipText: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: '#64748b',
-    },
-    tabChipTextActive: {
-        color: '#ffffff',
-    },
-    sectionCard: {
-        backgroundColor: '#f8fafc',
-        borderRadius: 24,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-        marginBottom: 20,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '900',
-        color: '#0f172a',
-        marginBottom: 16,
-    },
-    detailGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 20,
-    },
-    detailBox: {
-        flex: 1,
-        minWidth: 180,
-        backgroundColor: '#ffffff',
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    detailLabel: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: '#94a3b8',
-        textTransform: 'uppercase',
-    },
-    detailValue: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#0f172a',
-        marginTop: 4,
-    },
-    detailValueHighlight: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#8b72e6',
-        marginTop: 4,
-    },
-    shopNowBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#111111',
-        paddingVertical: 14,
-        borderRadius: 14,
-    },
-    shopNowBtnText: {
-        color: '#ffffff',
-        fontWeight: '900',
-        fontSize: 13,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: '#64748b',
-        textAlign: 'center',
-        paddingVertical: 20,
-    },
-    orderCard: {
-        backgroundColor: '#ffffff',
-        borderRadius: 18,
-        padding: 16,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    orderHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    orderIdText: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    orderDateText: {
-        fontSize: 11,
-        color: '#64748b',
-    },
-    statusBadge: {
-        backgroundColor: '#f3e8ff',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    statusBadgeText: {
-        fontSize: 10,
-        fontWeight: '900',
-        color: '#7e22ce',
-    },
-    orderItemsList: {
-        gap: 8,
-        marginBottom: 12,
-    },
-    orderItemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    itemThumb: {
-        width: 44,
-        height: 52,
-        borderRadius: 10,
-    },
-    itemBrand: {
-        fontSize: 10,
-        fontWeight: '800',
-        color: '#8b72e6',
-    },
-    itemName: {
-        fontSize: 13,
-        fontWeight: '800',
-        color: '#0f172a',
-    },
-    itemSpecs: {
-        fontSize: 11,
-        color: '#64748b',
-    },
-    itemPrice: {
-        fontSize: 13,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    orderFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderTopWidth: 1,
-        borderTopColor: '#f1f5f9',
-        paddingTop: 12,
-    },
-    totalText: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    trackOrderBtn: {
-        backgroundColor: '#8b72e6',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 10,
-    },
-    trackOrderBtnText: {
-        color: '#ffffff',
-        fontWeight: '900',
-        fontSize: 11,
-    },
-    cardHeaderRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    editText: {
-        fontSize: 12,
-        fontWeight: '800',
-        color: '#8b72e6',
-    },
-    addressBox: {
-        flexDirection: 'row',
-        gap: 12,
-        backgroundColor: '#ffffff',
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-    },
-    addrName: {
-        fontSize: 15,
-        fontWeight: '900',
-        color: '#0f172a',
-    },
-    addrText: {
-        fontSize: 13,
-        color: '#475569',
-        marginTop: 2,
-    },
-    addrPhone: {
-        fontSize: 12,
-        color: '#64748b',
-        marginTop: 6,
-    },
-    addressForm: {
-        backgroundColor: '#ffffff',
-        padding: 16,
-        borderRadius: 16,
-        gap: 12,
-    },
-    inputGroup: {
-        marginBottom: 4,
-    },
-    label: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: '#64748b',
-        marginBottom: 4,
-    },
-    input: {
-        backgroundColor: '#f8fafc',
-        borderWidth: 1,
-        borderColor: '#cbd5e1',
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        fontSize: 13,
-    },
-    rowForm: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    saveAddrBtn: {
-        backgroundColor: '#111111',
-        paddingVertical: 12,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 8,
-    },
-    addressError: {
-        color: '#dc2626',
-        fontSize: 13,
-        fontWeight: '700',
-        marginTop: 8,
-    },
-    saveAddrBtnText: {
-        color: '#ffffff',
-        fontWeight: '900',
-        fontSize: 12,
-    },
-    settingRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#ffffff',
-        padding: 16,
-        borderRadius: 16,
-    },
-    settingLabel: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: '#0f172a',
-    },
-    settingSub: {
-        fontSize: 12,
-        color: '#64748b',
-        marginTop: 2,
-    },
-    langToggle: {
-        flexDirection: 'row',
-        backgroundColor: '#f1f5f9',
-        borderRadius: 12,
-        padding: 3,
-    },
-    langBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 10,
-    },
-    langBtnActive: {
-        backgroundColor: '#111111',
-    },
-    langBtnText: {
-        fontSize: 12,
-        fontWeight: '800',
-        color: '#64748b',
-    },
-    langBtnTextActive: {
-        color: '#ffffff',
-    },
+    container: { flex: 1, backgroundColor: '#f8fafc' },
+    content: { width: '100%', maxWidth: 1000, alignSelf: 'center', padding: 20, paddingBottom: 48 },
+    profileCard: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 14, padding: 18, borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
+    avatar: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#ede9fe' },
+    profileInfo: { flex: 1, minWidth: 180 },
+    name: { color: '#0f172a', fontSize: 20, fontWeight: '900' },
+    email: { color: '#64748b', fontSize: 13, marginTop: 3 },
+    accessNote: { color: '#6d28d9', fontSize: 12, fontWeight: '700', marginTop: 6 },
+    logoutButton: { flexDirection: 'row', gap: 7, alignItems: 'center', padding: 10, borderRadius: 11, backgroundColor: '#fef2f2' },
+    logoutText: { color: '#b91c1c', fontSize: 11, fontWeight: '900' },
+    tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 18 },
+    tab: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
+    tabActive: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
+    tabText: { color: '#475569', fontSize: 11, fontWeight: '800' },
+    tabTextActive: { color: '#ffffff' },
+    section: { backgroundColor: '#ffffff', padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+    heading: { color: '#0f172a', fontSize: 21, fontWeight: '900' },
+    sectionIntro: { color: '#64748b', fontSize: 13, lineHeight: 20, marginTop: 6, marginBottom: 16 },
+    emptyState: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 12 },
+    emptyTitle: { color: '#0f172a', fontSize: 17, fontWeight: '900', marginTop: 12 },
+    emptyText: { color: '#64748b', textAlign: 'center', fontSize: 13, lineHeight: 20, maxWidth: 400, marginTop: 6 },
+    primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, backgroundColor: '#6d28d9', borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, marginTop: 18 },
+    primaryButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '900' },
+    bookCard: { flexDirection: 'row', gap: 15, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+    cover: { width: 92, height: 124, borderRadius: 10, backgroundColor: '#ede9fe' },
+    bookInfo: { flex: 1, justifyContent: 'center' },
+    bookCategory: { color: '#7c3aed', fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+    bookTitle: { color: '#0f172a', fontSize: 16, fontWeight: '900', marginTop: 4 },
+    bookFormat: { color: '#64748b', fontSize: 12, marginTop: 5 },
+    bookActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 13 },
+    readButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#6d28d9', borderRadius: 9, paddingVertical: 9, paddingHorizontal: 12 },
+    readButtonText: { color: '#ffffff', fontSize: 11, fontWeight: '900' },
+    downloadButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f3e8ff', borderRadius: 9, paddingVertical: 9, paddingHorizontal: 12 },
+    downloadButtonText: { color: '#6d28d9', fontSize: 11, fontWeight: '900' },
+    downloadError: { color: '#b91c1c', fontSize: 11, marginTop: 8 },
+    orderCard: { marginTop: 14, padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0' },
+    orderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
+    orderNumber: { color: '#0f172a', fontWeight: '900', fontSize: 13 },
+    orderDate: { color: '#94a3b8', fontSize: 11, marginTop: 3 },
+    status: { paddingVertical: 6, paddingHorizontal: 9, borderRadius: 20 },
+    paid: { backgroundColor: '#dcfce7' },
+    pending: { backgroundColor: '#fef3c7' },
+    failed: { backgroundColor: '#fee2e2' },
+    unverified: { backgroundColor: '#e2e8f0' },
+    statusText: { color: '#334155', fontWeight: '900', fontSize: 9 },
+    orderItem: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, paddingVertical: 6 },
+    orderItemName: { flex: 1, color: '#475569', fontSize: 12 },
+    orderItemPrice: { color: '#475569', fontWeight: '700', fontSize: 12 },
+    orderTotal: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 10, marginTop: 5 },
+    orderTotalLabel: { color: '#0f172a', fontWeight: '800' },
+    orderTotalPrice: { color: '#6d28d9', fontWeight: '900' },
+    profileDetail: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    detailLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '800' },
+    detailValue: { color: '#0f172a', fontSize: 14, fontWeight: '700', marginTop: 4 },
+    secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#c4b5fd', borderRadius: 12, padding: 13, marginTop: 18 },
+    secondaryButtonText: { color: '#6d28d9', fontSize: 12, fontWeight: '900' },
+    settingRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+    settingButton: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 11, paddingVertical: 11, paddingHorizontal: 14 },
+    settingButtonActive: { backgroundColor: '#f3e8ff', borderColor: '#8b5cf6' },
+    settingButtonText: { color: '#475569', fontSize: 13, fontWeight: '700' },
+    settingButtonTextActive: { color: '#6d28d9' },
 });

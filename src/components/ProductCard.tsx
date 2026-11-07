@@ -40,8 +40,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 />
 
                 <View
-                    style={[styles.imageActions, !showImageActions && styles.imageActionsHidden]}
-                    pointerEvents={showImageActions ? 'auto' : 'none'}
+                    style={[
+                        styles.imageActions,
+                        !showImageActions && styles.imageActionsHidden,
+                        { pointerEvents: showImageActions ? 'auto' : 'none' },
+                    ]}
                 >
                     {product.isNewIn && (
                         <View style={styles.tagBadge}>
