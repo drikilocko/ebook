@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     View,
     TouchableOpacity,
     StyleSheet,
@@ -22,8 +23,22 @@ export const AdminScreen: React.FC = () => {
         deleteProduct,
         formatPrice,
         navigateTo,
+        user,
+        authLoading,
+        setShowAuthModal,
     } = useShop();
     const { language } = useLanguage();
+    const navigateToRef = useRef(navigateTo);
+    navigateToRef.current = navigateTo;
+
+    useEffect(() => {
+        if (authLoading) return;
+        if (!user) {
+            setShowAuthModal(true);
+            return;
+        }
+        if (user.role !== 'admin') navigateToRef.current('shop');
+    }, [authLoading, user?.id, user?.role, setShowAuthModal]);
 
     const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'coupons'>('orders');
     const [orderFilter, setOrderFilter] = useState<'all' | 'placed' | 'processing' | 'shipped' | 'delivered'>('all');
@@ -59,12 +74,53 @@ export const AdminScreen: React.FC = () => {
         return matchesStatus && matchesQuery;
     });
 
+    if (authLoading) {
+        return (
+            <View style={styles.container}>
+                <Header />
+                <View style={styles.accessState}>
+                    <ActivityIndicator size="large" color="#6d28d9" />
+                </View>
+            </View>
+        );
+    }
+
+    if (!user || user.role !== 'admin') {
+        return (
+            <View style={styles.container}>
+                <Header />
+                <View style={styles.accessState}>
+                    <Feather name="shield" size={34} color="#6d28d9" />
+                    <Text style={styles.accessTitle}>Accès réservé à l’administration</Text>
+                    <Text style={styles.accessText}>
+                        {!user
+                            ? 'Connectez-vous avec un compte administrateur pour accéder à cette page.'
+                            : 'Ce compte ne dispose pas des droits administrateur.'}
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.accessButton}
+                        onPress={() => user ? navigateTo('shop') : setShowAuthModal(true)}
+                    >
+                        <Text style={styles.accessButtonText}>{user ? 'RETOURNER À LA BOUTIQUE' : 'SE CONNECTER'}</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
+
     const handleCreateProduct = () => {
         if (!newTitle.trim() || !newEbookStoragePath.trim()) {
-            setProductFormError('Renseignez le titre et le chemin du PDF dans le bucket privé.');
+            setProductFormError('Renseignez le titre et le chemin du fichier HTML ou PDF dans le bucket privé.');
+            return;
+        }
+        const ebookPath = newEbookStoragePath.trim();
+        const extension = ebookPath.toLowerCase().split('.').pop();
+        if (extension !== 'pdf' && extension !== 'html' && extension !== 'htm' && extension !== 'json') {
+            setProductFormError('Le fichier doit être au format PDF, HTML, HTM ou JSON.');
             return;
         }
         setProductFormError(null);
+        const ebookFormat = extension === 'pdf' ? 'pdf' : extension === 'json' ? 'json' : 'html';
         addProduct({
             name: newTitle,
             brand: newBrand,
@@ -74,14 +130,14 @@ export const AdminScreen: React.FC = () => {
             reviewsCount: 1,
             category: newCategory,
             productType: newProductType,
-            colors: [{ name: 'Ebook PDF', hex: '#6d28d9' }],
+            colors: [{ name: ebookFormat === 'pdf' ? 'Ebook PDF' : ebookFormat === 'json' ? 'Ebook JSON' : 'Ebook HTML', hex: '#6d28d9' }],
             images: [newImage],
             description: 'Ebook de formation pratique disponible après confirmation du paiement.',
             specifications: newSpecifications,
             isNewIn: true,
             isBestSeller: false,
-            ebookFormat: 'pdf',
-            ebookStoragePath: newEbookStoragePath.trim(),
+            ebookFormat,
+            ebookStoragePath: ebookPath,
         });
         setShowAddModal(false);
         setNewTitle('');
@@ -444,14 +500,17 @@ export const AdminScreen: React.FC = () => {
                             </View>
 
                             <View style={styles.formGroup}>
-                                <Text style={styles.inputLabel}>Chemin du PDF dans le bucket privé « ebooks »</Text>
+                                <Text style={styles.inputLabel}>Chemin du fichier HTML ou PDF dans le bucket privé « ebooks »</Text>
                                 <TextInput
                                     style={styles.modalInput}
                                     value={newEbookStoragePath}
                                     onChangeText={setNewEbookStoragePath}
-                                    placeholder="formations/mon-ebook.pdf"
+                                    placeholder="formations/mon-livre.html ou mon-livre.pdf"
                                     autoCapitalize="none"
                                 />
+                                <Text style={styles.productCategory}>
+                                    Téléversez d’abord le fichier dans le bucket privé « ebooks », puis indiquez son chemin ici.
+                                </Text>
                             </View>
 
                             {productFormError ? <Text style={styles.orderAdminDate}>{productFormError}</Text> : null}
@@ -470,6 +529,39 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
+    },
+    accessState: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 28,
+    },
+    accessTitle: {
+        color: '#0f172a',
+        fontSize: 22,
+        fontWeight: '900',
+        textAlign: 'center',
+        marginTop: 16,
+    },
+    accessText: {
+        color: '#64748b',
+        fontSize: 14,
+        lineHeight: 21,
+        textAlign: 'center',
+        maxWidth: 430,
+        marginTop: 8,
+    },
+    accessButton: {
+        backgroundColor: '#6d28d9',
+        borderRadius: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 13,
+        marginTop: 18,
+    },
+    accessButtonText: {
+        color: '#ffffff',
+        fontSize: 12,
+        fontWeight: '900',
     },
     scrollContent: {
         paddingHorizontal: 24,

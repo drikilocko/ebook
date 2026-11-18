@@ -232,17 +232,25 @@ create policy "Paid ebook buyers can read purchased ebooks"
     on storage.objects for select to authenticated
     using (
         bucket_id = 'ebooks'
-        and exists (
-            select 1
-            from public.orders o
-            cross join lateral jsonb_array_elements(
-                case when jsonb_typeof(o.items) = 'array' then o.items else '[]'::jsonb end
-            ) item
-            join public.products p
-              on p.id = (item -> 'product' ->> 'id')
-            where o.user_id = (select auth.uid())
-              and o.payment_status = 'paid'
-              and o.payment_verified
-              and p.data ->> 'ebookStoragePath' = storage.objects.name
+        and (
+            exists (
+                select 1
+                from public.orders o
+                cross join lateral jsonb_array_elements(
+                    case when jsonb_typeof(o.items) = 'array' then o.items else '[]'::jsonb end
+                ) item
+                join public.products p
+                  on p.id = (item -> 'product' ->> 'id')
+                where o.user_id = (select auth.uid())
+                  and o.payment_status = 'paid'
+                  and o.payment_verified
+                  and p.data ->> 'ebookStoragePath' = storage.objects.name
+            )
+            or exists (
+                select 1
+                from public.products p
+                where p.data ->> 'ebookStoragePath' = storage.objects.name
+                  and p.data @> '{"price": 0}'::jsonb
+            )
         )
     );

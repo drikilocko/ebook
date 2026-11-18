@@ -99,6 +99,7 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+const storeUrl = 'https://www.dreamyyspace.com/';
 
 const jsonResp = (body: Record<string, unknown>, status: number) =>
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -109,9 +110,6 @@ const isRec = (value: unknown): value is Record<string, unknown> =>
 Deno.serve(async (req: Request) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
     if (req.method !== 'POST') return jsonResp({ error: 'Méthode non autorisée.' }, 405);
-
-    const authorization = req.headers.get('Authorization');
-    if (!authorization) return jsonResp({ error: 'Authentification requise.' }, 401);
 
     let payload: unknown;
     try {
@@ -130,12 +128,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseAnonKey || !masterKey || !pdToken || !privateKey) {
         return jsonResp({ error: 'Service de paiement non configuré.' }, 500);
     }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authorization } },
-    });
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return jsonResp({ error: 'Session invalide. Reconnectez-vous.' }, 401);
+    const callbackUrl = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/paydunya-checkout`;
 
     const pdHeaders = {
         'Content-Type': 'application/json',
@@ -143,12 +136,12 @@ Deno.serve(async (req: Request) => {
         'PAYDUNYA-PRIVATE-KEY': privateKey,
         'PAYDUNYA-TOKEN': pdToken,
     };
-
-    const updateOrderPayment = async (
+    const persistOrderPayment = async (
         orderId: string,
         paymentStatus: 'pending' | 'paid' | 'failed',
         paymentReference?: string | null,
         paymentMethod?: string,
+        ownerId?: string,
     ) => {
         if (!serviceRoleKey) return new Error('La mise à jour sécurisée du paiement n’est pas configurée.');
         const admin = createClient(supabaseUrl, serviceRoleKey);
@@ -159,13 +152,93 @@ Deno.serve(async (req: Request) => {
         if (paymentReference !== undefined) update.payment_reference = paymentReference;
         if (paymentMethod !== undefined) update.payment_method = paymentMethod;
         if (paymentStatus === 'paid') update.status = 'processing';
-        const { error } = await admin
-            .from('orders')
-            .update(update)
-            .eq('id', orderId)
-            .eq('user_id', user.id);
+        let query = admin.from('orders').update(update).eq('id', orderId);
+        if (ownerId) query = query.eq('user_id', ownerId);
+        const { error } = await query;
         return error;
     };
+    const checkProviderStatus = async (invoiceToken: string): Promise<'pending' | 'paid' | 'failed'> => {
+        const response = await fetch(`https://app.paydunya.com/api/v1/checkout-invoice/confirm/${encodeURIComponent(invoiceToken)}`, {
+            method: 'GET',
+            headers: pdHeaders,
+        });
+        const result: unknown = await response.json();
+        if (!response.ok || !isRec(result) || typeof result.status !== 'string') {
+            throw new Error('Impossible de vérifier le statut PayDunya.');
+        }
+        const providerStatus = result.status.toLowerCase();
+        return ['completed', 'success', 'paid'].includes(providerStatus)
+            ? 'paid'
+            : ['cancelled', 'canceled', 'failed'].includes(providerStatus)
+                ? 'failed'
+                : 'pending';
+    };
+
+    if (!req.headers.has('Authorization')) {
+        const callbackData = isRec(payload.data) ? payload.data : payload;
+        const callbackHash = callbackData.hash;
+        const invoice = isRec(callbackData.invoice) ? callbackData.invoice : {};
+        const invoiceToken = typeof invoice.token === 'string'
+            ? invoice.token
+            : typeof callbackData.token === 'string'
+                ? callbackData.token
+                : null;
+        if (typeof callbackHash !== 'string' || !invoiceToken || !serviceRoleKey) {
+            return jsonResp({ error: 'Notification PayDunya invalide.' }, 400);
+        }
+
+        const expectedHashBuffer = await crypto.subtle.digest('SHA-512', new TextEncoder().encode(masterKey));
+        const expectedHash = Array.from(new Uint8Array(expectedHashBuffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+        if (
+            callbackHash.length !== expectedHash.length
+            || [...callbackHash.toLowerCase()].reduce((difference, char, index) => difference | (char.charCodeAt(0) ^ expectedHash.charCodeAt(index)), 0) !== 0
+        ) {
+            return jsonResp({ error: 'Signature de notification PayDunya invalide.' }, 401);
+        }
+
+        const admin = createClient(supabaseUrl, serviceRoleKey);
+        const { data: order, error: orderError } = await admin
+            .from('orders')
+            .select('id, payment_status')
+            .eq('payment_reference', invoiceToken)
+            .maybeSingle();
+        if (orderError) {
+            console.error('Unable to find PayDunya callback order', orderError);
+            return jsonResp({ error: 'Impossible de retrouver la commande.' }, 500);
+        }
+        if (!order) return jsonResp({ error: 'Commande PayDunya introuvable.' }, 404);
+        if (order.payment_status === 'paid') return jsonResp({ received: true, status: 'paid' }, 200);
+
+        try {
+            const paymentStatus = await checkProviderStatus(invoiceToken);
+            if (paymentStatus !== 'pending') {
+                const updateError = await persistOrderPayment(order.id, paymentStatus);
+                if (updateError) {
+                    console.error('Unable to persist PayDunya callback status', updateError);
+                    return jsonResp({ error: 'Impossible de mettre à jour le statut de la commande.' }, 500);
+                }
+            }
+            return jsonResp({ received: true, status: paymentStatus }, 200);
+        } catch (error) {
+            console.error('Unable to confirm PayDunya callback', error);
+            return jsonResp({ error: 'Impossible de confirmer la notification PayDunya.' }, 502);
+        }
+    }
+
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) return jsonResp({ error: 'Authentification requise.' }, 401);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authorization } },
+    });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return jsonResp({ error: 'Session invalide. Reconnectez-vous.' }, 401);
+
+    const updateOrderPayment = async (
+        orderId: string,
+        paymentStatus: 'pending' | 'paid' | 'failed',
+        paymentReference?: string | null,
+        paymentMethod?: string,
+    ) => persistOrderPayment(orderId, paymentStatus, paymentReference, paymentMethod, user.id);
 
     const calculateVerifiedOrderAmount = async (order: {
         items: unknown;
@@ -274,20 +347,7 @@ Deno.serve(async (req: Request) => {
         if (!order.payment_reference) return jsonResp({ status: order.payment_status }, 200);
 
         try {
-            const response = await fetch(`https://app.paydunya.com/api/v1/checkout-invoice/confirm/${encodeURIComponent(order.payment_reference)}`, {
-                method: 'GET',
-                headers: pdHeaders,
-            });
-            const result: unknown = await response.json();
-            if (!response.ok || !isRec(result) || typeof result.status !== 'string') {
-                return jsonResp({ error: 'Impossible de vérifier le statut PayDunya.' }, 502);
-            }
-            const providerStatus = result.status.toLowerCase();
-            const paymentStatus = ['completed', 'success', 'paid'].includes(providerStatus)
-                ? 'paid'
-                : ['cancelled', 'canceled', 'failed'].includes(providerStatus)
-                    ? 'failed'
-                    : 'pending';
+            const paymentStatus = await checkProviderStatus(order.payment_reference);
             if (paymentStatus !== 'pending') {
                 const updateError = await updateOrderPayment(
                     order.id,
@@ -311,6 +371,26 @@ Deno.serve(async (req: Request) => {
         if (typeof orderId !== 'string' || !orderId.trim()) {
             return jsonResp({ error: 'Identifiant de commande invalide.' }, 400);
         }
+        const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : '';
+        const cardNumber = typeof payload.cardNumber === 'string' ? payload.cardNumber.replace(/\D/g, '') : '';
+        const cardCvv = typeof payload.cardCvv === 'string' ? payload.cardCvv.replace(/\D/g, '') : '';
+        const cardExpiredDateMonth = typeof payload.cardExpiredDateMonth === 'string' ? payload.cardExpiredDateMonth : '';
+        const cardExpiredDateYear = typeof payload.cardExpiredDateYear === 'string' ? payload.cardExpiredDateYear : '';
+        const expirationMonth = Number(cardExpiredDateMonth);
+        const expirationYear = 2000 + Number(cardExpiredDateYear);
+        const now = new Date();
+        if (
+            !fullName
+            || fullName.length > 100
+            || !/^\d{12,19}$/.test(cardNumber)
+            || !/^\d{3,4}$/.test(cardCvv)
+            || !/^(0[1-9]|1[0-2])$/.test(cardExpiredDateMonth)
+            || !/^\d{2}$/.test(cardExpiredDateYear)
+            || expirationYear < now.getUTCFullYear()
+            || (expirationYear === now.getUTCFullYear() && expirationMonth < now.getUTCMonth() + 1)
+        ) {
+            return jsonResp({ error: 'Les informations de carte sont invalides ou expirées.' }, 400);
+        }
         if (!serviceRoleKey) {
             return jsonResp({ error: 'La confirmation sécurisée du paiement n’est pas configurée.' }, 500);
         }
@@ -332,9 +412,6 @@ Deno.serve(async (req: Request) => {
         const verifiedAmount = await calculateVerifiedOrderAmount(order);
         if (!verifiedAmount.amountXOF) return jsonResp({ error: verifiedAmount.error || 'Le montant de la commande est invalide.' }, 400);
         const amountXOF = verifiedAmount.amountXOF;
-        const customerName = typeof payload.customerName === 'string' && payload.customerName.trim()
-            ? payload.customerName.trim()
-            : user.email || 'Client';
         let response: Response;
         try {
             response = await fetch('https://app.paydunya.com/api/v1/checkout-invoice/create', {
@@ -345,7 +422,7 @@ Deno.serve(async (req: Request) => {
                         total_amount: amountXOF,
                         description: `Ebooks Secret d’Ange - commande ${order.id}`,
                         channels: ['card'],
-                        customer: { name: customerName, email: user.email || '' },
+                        customer: { name: fullName, email: user.email || '' },
                     },
                     store: {
                         name: 'Secret d’Ange',
@@ -354,9 +431,9 @@ Deno.serve(async (req: Request) => {
                         postal_address: 'Lomé, Togo',
                     },
                     actions: {
-                        cancel_url: 'https://zonedepapy.com/cancel',
-                        return_url: 'https://zonedepapy.com/success',
-                        callback_url: 'https://zonedepapy.com/api/ipn',
+                        cancel_url: `${storeUrl}?payment=cancelled`,
+                        return_url: `${storeUrl}?payment=return`,
+                        callback_url: callbackUrl,
                     },
                     custom_data: { order_id: order.id, customer_email: user.email || '' },
                 }),
@@ -390,24 +467,128 @@ Deno.serve(async (req: Request) => {
             console.error('Unable to save PayDunya card invoice reference', referenceError);
             return jsonResp({ error: 'Facture créée mais impossible de préparer la confirmation sécurisée.' }, 500);
         }
-        if (typeof invoice.response_text !== 'string') {
-            return jsonResp({ error: 'PayDunya n’a pas fourni le lien de paiement sécurisé.' }, 502);
-        }
-        let paymentUrl: URL;
+
+        let cardResponse: Response;
         try {
-            paymentUrl = new URL(invoice.response_text);
+            cardResponse = await fetch('https://app.paydunya.com/api/v1/softpay/card', {
+                method: 'POST',
+                headers: pdHeaders,
+                body: JSON.stringify({
+                    full_name: fullName,
+                    email: user.email || '',
+                    card_number: cardNumber,
+                    card_cvv: cardCvv,
+                    card_expired_date_year: cardExpiredDateYear,
+                    card_expired_date_month: cardExpiredDateMonth,
+                    token: invoice.token,
+                }),
+            });
         } catch {
-            return jsonResp({ error: 'PayDunya a renvoyé un lien de paiement invalide.' }, 502);
+            console.error('Unable to reach PayDunya card SoftPay endpoint');
+            return jsonResp({
+                error: 'Impossible de joindre PayDunya pour traiter la carte.',
+                paymentStatus: 'pending',
+                amountXOF,
+                invoiceToken: invoice.token,
+            }, 502);
         }
-        if (paymentUrl.protocol !== 'https:') {
-            return jsonResp({ error: 'PayDunya a renvoyé un lien de paiement non sécurisé.' }, 502);
+
+        let cardResult: unknown;
+        try {
+            cardResult = await cardResponse.json();
+        } catch {
+            return jsonResp({
+                error: 'PayDunya a renvoyé une réponse carte invalide.',
+                paymentStatus: 'pending',
+                amountXOF,
+                invoiceToken: invoice.token,
+            }, 502);
+        }
+        if (!isRec(cardResult) || typeof cardResult.success !== 'boolean') {
+            console.error('PayDunya returned an invalid card SoftPay response', cardResponse.status);
+            return jsonResp({
+                error: 'PayDunya a renvoyé une réponse carte invalide.',
+                paymentStatus: 'pending',
+                amountXOF,
+                invoiceToken: invoice.token,
+            }, 502);
+        }
+        if (cardResult.success === false) {
+            const updateError = await updateOrderPayment(order.id, 'failed', null, 'card');
+            if (updateError) {
+                console.error('Unable to persist rejected PayDunya card payment', updateError);
+                return jsonResp({ error: 'PayDunya a refusé la carte et le statut de la commande n’a pas pu être enregistré.' }, 500);
+            }
+            const providerError = typeof cardResult.message === 'string'
+                ? cardResult.message
+                : 'Le paiement a été refusé par la banque.';
+            return jsonResp({ error: providerError }, 402);
+        }
+        if (!cardResponse.ok) {
+            console.error('PayDunya card SoftPay returned an unsuccessful HTTP status', cardResponse.status);
+            return jsonResp({
+                error: 'PayDunya n’a pas pu confirmer le traitement de la carte.',
+                paymentStatus: 'pending',
+                amountXOF,
+                invoiceToken: invoice.token,
+            }, 502);
+        }
+
+        let paymentUrl: URL | undefined;
+        if (typeof cardResult.url === 'string') {
+            try {
+                paymentUrl = new URL(cardResult.url);
+            } catch {
+                return jsonResp({ error: 'PayDunya a renvoyé un lien 3-D Secure invalide.' }, 502);
+            }
+            if (paymentUrl.protocol !== 'https:' || !/(^|\.)paydunya\.com$/i.test(paymentUrl.hostname)) {
+                return jsonResp({ error: 'PayDunya a renvoyé un lien 3-D Secure non sécurisé.' }, 502);
+            }
+        }
+
+        let paymentStatus: 'pending' | 'paid' | 'failed' = 'pending';
+        if (!paymentUrl) {
+            try {
+                paymentStatus = await checkProviderStatus(invoice.token);
+            } catch (error) {
+                console.error('Unable to confirm direct PayDunya card payment status', error);
+            }
+        }
+        if (paymentStatus === 'failed') {
+            const updateError = await updateOrderPayment(order.id, 'failed', null, 'card');
+            if (updateError) {
+                console.error('Unable to persist failed PayDunya card status', updateError);
+                return jsonResp({ error: 'Le paiement a échoué et le statut de la commande n’a pas pu être enregistré.' }, 500);
+            }
+            return jsonResp({ error: 'Le paiement a été refusé ou annulé par la banque.' }, 402);
+        }
+        const statusError = await updateOrderPayment(
+            order.id,
+            paymentStatus,
+            paymentStatus === 'failed' ? null : undefined,
+            'card',
+        );
+        if (statusError) {
+            console.error('Unable to persist direct PayDunya card status', statusError);
+            return jsonResp({
+                error: 'Paiement reçu mais impossible de mettre à jour le statut de la commande.',
+                paymentStatus: 'pending',
+                amountXOF,
+                invoiceToken: invoice.token,
+            }, 500);
         }
 
         return jsonResp({
-            message: 'Redirection vers le paiement sécurisé par carte.',
+            success: true,
+            message: paymentUrl
+                ? 'Une vérification 3-D Secure de votre banque est nécessaire.'
+                : paymentStatus === 'paid'
+                    ? 'Paiement par carte confirmé.'
+                    : 'Paiement transmis à PayDunya. Vérification en cours.',
             amountXOF,
             invoiceToken: invoice.token,
-            paymentUrl: paymentUrl.toString(),
+            paymentStatus,
+            paymentUrl: paymentUrl?.toString(),
         }, 200);
     }
 
@@ -495,9 +676,9 @@ Deno.serve(async (req: Request) => {
                     postal_address: 'Lomé, Togo',
                 },
                 actions: {
-                    cancel_url: 'https://zonedepapy.com/cancel',
-                    return_url: 'https://zonedepapy.com/success',
-                    callback_url: 'https://zonedepapy.com/api/ipn',
+                    cancel_url: `${storeUrl}?payment=cancelled`,
+                    return_url: `${storeUrl}?payment=return`,
+                    callback_url: callbackUrl,
                 },
                 custom_data: {
                     order_id: orderId.trim(),

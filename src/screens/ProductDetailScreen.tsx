@@ -23,6 +23,7 @@ export const ProductDetailScreen: React.FC = () => {
         formatPrice,
         navigateTo,
         products,
+        openBook,
     } = useShop();
     const { width } = useWindowDimensions();
     const { language } = useLanguage();
@@ -55,6 +56,14 @@ export const ProductDetailScreen: React.FC = () => {
 
     const isFavorite = isInWishlist(selectedProduct.id);
     const isEbook = !!selectedProduct.ebookStoragePath || selectedProduct.productType === 'Ebook de formation';
+    const theme = selectedProduct.theme ?? {
+        background: '#f8fafc',
+        surface: '#f8fafc',
+        accent: '#6d28d9',
+        title: '#111111',
+        text: '#0f172a',
+        glow: 'rgba(109, 40, 217, 0.18)',
+    };
 
     const handleAddToCart = () => {
         addToCart(selectedProduct, selectedColor, quantity);
@@ -68,8 +77,12 @@ export const ProductDetailScreen: React.FC = () => {
     };
 
     const relatedProducts = products
-        .filter((product) => product.category === selectedProduct.category && product.id !== selectedProduct.id)
-        .slice(0, 3);
+        .filter((product) => {
+            if (product.id === selectedProduct.id) return false;
+            if (selectedProduct.relatedBookIds?.includes(product.id)) return true;
+            return product.category === selectedProduct.category;
+        })
+        .slice(0, 5);
 
     return (
         <View style={styles.container}>
@@ -133,13 +146,15 @@ export const ProductDetailScreen: React.FC = () => {
                                     {formatPrice(selectedProduct.originalPrice)}
                                 </Text>
                             ) : null}
-                            <View style={styles.ratingBadge}>
-                                <Ionicons name="star" size={14} color="#111111" />
-                                <Text style={styles.ratingText}>{selectedProduct.rating}</Text>
-                                <Text style={styles.reviewsCount}>
-                                    ({selectedProduct.reviewsCount} {language === 'fr' ? 'avis' : 'reviews'})
-                                </Text>
-                            </View>
+                            {selectedProduct.rating > 0 ? (
+                                <View style={styles.ratingBadge}>
+                                    <Ionicons name="star" size={14} color="#111111" />
+                                    <Text style={styles.ratingText}>{selectedProduct.rating}</Text>
+                                    <Text style={styles.reviewsCount}>
+                                        ({selectedProduct.reviewsCount} {language === 'fr' ? 'avis' : 'reviews'})
+                                    </Text>
+                                </View>
+                            ) : null}
                         </View>
 
                         {!isEbook && <View style={styles.section}>
@@ -191,8 +206,17 @@ export const ProductDetailScreen: React.FC = () => {
                             </View>
                         )}
 
-                        <TouchableOpacity style={styles.buyNowBtn} onPress={handleBuyNow}>
-                            <Text style={styles.buyNowBtnText}>{isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}</Text>
+                        <TouchableOpacity
+                            style={styles.buyNowBtn}
+                            onPress={isEbook && selectedProduct.price === 0
+                                ? () => openBook(selectedProduct)
+                                : handleBuyNow}
+                        >
+                            <Text style={styles.buyNowBtnText}>
+                                {isEbook && selectedProduct.price === 0
+                                    ? 'LIRE GRATUITEMENT'
+                                    : isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}
+                            </Text>
                         </TouchableOpacity>
 
                         <View style={styles.accordionsWrapper}>
@@ -252,13 +276,53 @@ export const ProductDetailScreen: React.FC = () => {
                             )}
                         </View>
 
+                        {selectedProduct.preview && (
+                            <View style={[styles.previewCard, { backgroundColor: theme.background, borderColor: theme.glow }]}>
+                                <Text style={[styles.previewTitle, { color: theme.title }]}>Avant-goût du livre</Text>
+                                <Text style={[styles.previewText, { color: theme.text }]}>{selectedProduct.preview}</Text>
+                            </View>
+                        )}
+
+                        {selectedProduct.userAppreciations && selectedProduct.userAppreciations.length > 0 && (
+                            <View style={styles.socialProofCard}>
+                                <Text style={styles.socialProofTitle}>Ce que les lecteurs disent</Text>
+                                <View style={styles.appreciationList}>
+                                    {selectedProduct.userAppreciations.slice(0, 3).map((item) => (
+                                        <View key={item.id} style={styles.appreciationItem}>
+                                            <View style={styles.appreciationMetaRow}>
+                                                <Text style={styles.appreciationAuthor}>{item.author}</Text>
+                                                <Text style={styles.appreciationRating}>{'★'.repeat(item.rating)}{item.rating < 5 ? '☆'.repeat(5 - item.rating) : ''}</Text>
+                                            </View>
+                                            <Text style={styles.appreciationHighlight}>{item.highlight}</Text>
+                                            <Text style={styles.appreciationQuote}>“{item.quote}”</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {selectedProduct.comments && selectedProduct.comments.length > 0 && (
+                            <View style={styles.commentsCard}>
+                                <Text style={styles.commentsTitle}>Commentaires de lecteurs</Text>
+                                <View style={styles.commentList}>
+                                    {selectedProduct.comments.slice(0, 5).map((comment) => (
+                                        <View key={comment.id} style={styles.commentItem}>
+                                            <Text style={styles.commentUser}>{comment.user}</Text>
+                                            <Text style={styles.commentChapter}>{comment.chapter}</Text>
+                                            <Text style={styles.commentText}>{comment.text}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
                         <ProductReviews product={selectedProduct} />
                     </View>
                 </View>
 
                 {relatedProducts.length > 0 && (
                     <View style={styles.recommendationsContainer}>
-                        <Text style={styles.recommendationsTitle}>You Might Also Like</Text>
+                        <Text style={styles.recommendationsTitle}>5 livres conseillés</Text>
                         <View style={styles.relatedGrid}>
                             {relatedProducts.map((product) => (
                                 <ProductCard key={product.id} product={product} />
@@ -538,6 +602,117 @@ const styles = StyleSheet.create({
         color: '#475569',
         lineHeight: 22,
         paddingBottom: 16,
+    },
+    previewCard: {
+        borderWidth: 1,
+        borderRadius: 18,
+        padding: 18,
+        marginBottom: 24,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+        elevation: 3,
+    },
+    previewTitle: {
+        fontSize: 13,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+        marginBottom: 10,
+    },
+    previewText: {
+        fontSize: 14,
+        lineHeight: 22,
+        fontWeight: '700',
+    },
+    socialProofCard: {
+        backgroundColor: '#fff7ed',
+        borderRadius: 18,
+        padding: 18,
+        marginBottom: 24,
+    },
+    socialProofTitle: {
+        color: '#0f172a',
+        fontSize: 18,
+        fontWeight: '900',
+        marginBottom: 12,
+    },
+    appreciationList: {
+        gap: 12,
+    },
+    appreciationItem: {
+        backgroundColor: '#ffffff',
+        borderRadius: 14,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#fed7aa',
+    },
+    appreciationMetaRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    appreciationAuthor: {
+        color: '#0f172a',
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    appreciationRating: {
+        color: '#f59e0b',
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    appreciationHighlight: {
+        color: '#7c2d12',
+        fontSize: 12,
+        fontWeight: '800',
+        marginBottom: 6,
+    },
+    appreciationQuote: {
+        color: '#475569',
+        fontSize: 13,
+        lineHeight: 20,
+    },
+    commentsCard: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 18,
+        padding: 18,
+        marginBottom: 24,
+    },
+    commentsTitle: {
+        color: '#0f172a',
+        fontSize: 18,
+        fontWeight: '900',
+        marginBottom: 12,
+    },
+    commentList: {
+        gap: 12,
+    },
+    commentItem: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    commentUser: {
+        color: '#0f172a',
+        fontSize: 12,
+        fontWeight: '800',
+        marginBottom: 4,
+    },
+    commentChapter: {
+        color: '#6d28d9',
+        fontSize: 11,
+        fontWeight: '800',
+        marginBottom: 6,
+    },
+    commentText: {
+        color: '#475569',
+        fontSize: 13,
+        lineHeight: 20,
     },
     recommendationsContainer: {
         marginTop: 48,

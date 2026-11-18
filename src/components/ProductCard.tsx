@@ -78,11 +78,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                         style={styles.quickAddButton}
                         onPress={(e) => {
                             e.stopPropagation();
-                            addToCart(product);
+                            if (product.price === 0) openProductDetail(product);
+                            else addToCart(product);
                         }}
                         activeOpacity={0.8}
+                        accessibilityLabel={product.price === 0 ? 'Voir le livre gratuit' : 'Ajouter au panier'}
                     >
-                        <Feather name="plus" size={16} color="#ffffff" />
+                        <Feather name={product.price === 0 ? 'book-open' : 'plus'} size={16} color="#ffffff" />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -102,10 +104,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                             {formatPrice(product.originalPrice)}
                         </Text>
                     )}
-                    <View style={styles.ratingBadge}>
-                        <Ionicons name="star" size={12} color="#111111" />
-                        <Text style={styles.ratingText}>{product.rating}</Text>
-                    </View>
+                    {product.rating > 0 ? (
+                        <View style={styles.ratingBadge}>
+                            <Ionicons name="star" size={12} color="#111111" />
+                            <Text style={styles.ratingText}>{product.rating}</Text>
+                        </View>
+                    ) : null}
                 </View>
             </View>
         </Pressable>

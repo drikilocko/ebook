@@ -38,7 +38,13 @@ export const CartScreen: React.FC = () => {
                                     <View style={styles.itemInfo}>
                                         <Text style={styles.category}>{item.product.category}</Text>
                                         <Text style={styles.name}>{item.product.name}</Text>
-                                        <Text style={styles.format}>Ebook PDF · Quantité {item.quantity}</Text>
+                                        <Text style={styles.format}>
+                                            {item.product.ebookFormat === 'html'
+                                                ? 'Ebook HTML'
+                                                : item.product.ebookFormat === 'json'
+                                                    ? 'Ebook JSON'
+                                                    : 'Ebook PDF'} · Quantité {item.quantity}
+                                        </Text>
                                         <Text style={styles.price}>{formatPrice(item.product.price * item.quantity)}</Text>
                                     </View>
                                     <TouchableOpacity

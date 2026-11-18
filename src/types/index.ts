@@ -6,6 +6,31 @@ export interface Currency {
     rate: number; // relative to USD
 }
 
+export interface ProductTheme {
+    background: string;
+    surface: string;
+    accent: string;
+    title: string;
+    text: string;
+    glow: string;
+}
+
+export interface ProductAppreciation {
+    id: string;
+    author: string;
+    rating: number;
+    quote: string;
+    highlight: string;
+}
+
+export interface ProductComment {
+    id: string;
+    user: string;
+    chapter: string;
+    text: string;
+    rating: number;
+}
+
 export interface Product {
     id: string;
     name: string;
@@ -16,14 +41,21 @@ export interface Product {
     rating: number;
     reviewsCount: number;
     images: string[];
+    backgroundImage?: string;
+    theme?: ProductTheme;
+    preview?: string;
+    relatedBookIds?: string[];
+    userAppreciations?: ProductAppreciation[];
+    comments?: ProductComment[];
     colors: { name: string; hex: string }[];
     description: string;
     specifications: string;
     isNewIn?: boolean;
     isBestSeller?: boolean;
+    isHidden?: boolean;
     productType?: string;
     ebookStoragePath?: string;
-    ebookFormat?: 'pdf';
+    ebookFormat?: 'pdf' | 'html' | 'json';
 }
 
 export interface CartItem {

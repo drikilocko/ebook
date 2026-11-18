@@ -4,6 +4,9 @@
 # working directory name when running `supabase init`.
 project_id = "zone_de_papy_-_Copy"
 
+[functions.paydunya-checkout]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

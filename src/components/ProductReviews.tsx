@@ -20,35 +20,11 @@ interface Review {
 
 export const ProductReviews: React.FC<ProductReviewsProps> = ({ product }) => {
     const { language } = useLanguage();
-    const [reviews, setReviews] = useState<Review[]>([
-        {
-            id: 'rev-1',
-            author: 'Amélie Laurent',
-            rating: 5,
-            date: '2 days ago',
-            comment: 'Obsessed with the quality of this piece! The oversized drop shoulders are so flattering, and the material feels incredibly premium.',
-            verified: true,
-            likes: 24,
-        },
-        {
-            id: 'rev-2',
-            author: 'Marcus Vance',
-            rating: 5,
-            date: '1 week ago',
-            comment: 'Secret d’Ange always delivers practical training content. Clear, useful, and easy to follow.',
-            verified: true,
-            likes: 18,
-        },
-        {
-            id: 'rev-3',
-            author: 'Camille Dupont',
-            rating: 4,
-            date: '2 weeks ago',
-            comment: 'Super stylish and comfortable! Color is slightly warmer than photo but looks even better in person.',
-            verified: true,
-            likes: 9,
-        },
-    ]);
+    const [reviews, setReviews] = useState<Review[]>([]);
+    const reviewCount = product.reviewsCount + reviews.length;
+    const reviewAverage = reviews.length
+        ? reviews.reduce((total, review) => total + review.rating, 0) / reviews.length
+        : product.rating;
 
     const [showReviews, setShowReviews] = useState(false);
     const [showReviewForm, setShowReviewForm] = useState(false);
@@ -64,7 +40,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({ product }) => {
             rating: newRating,
             date: 'Just now',
             comment: newComment,
-            verified: true,
+            verified: false,
             likes: 0,
         };
         setReviews([newRev, ...reviews]);
@@ -99,7 +75,11 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({ product }) => {
                 <View>
                     <Text style={styles.sectionTitle}>Customer Reviews & Ratings</Text>
                     <Text style={styles.scoreSub}>
-                        {product.rating.toFixed(1)} / 5 · {product.reviewsCount} {language === 'fr' ? 'avis' : 'reviews'}
+                        {product.rating > 0
+                            ? `${product.rating.toFixed(1)} / 5 · ${reviewCount} ${language === 'fr' ? 'avis' : 'reviews'}`
+                            : reviews.length
+                                ? `${reviewAverage.toFixed(1)} / 5 · ${reviewCount} ${language === 'fr' ? 'avis' : 'reviews'}`
+                            : (language === 'fr' ? 'Aucun avis pour le moment' : 'No reviews yet')}
                     </Text>
                 </View>
                 <Feather name={showReviews ? 'chevron-up' : 'chevron-down'} size={22} color="#111111" />
@@ -108,39 +88,23 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({ product }) => {
             {showReviews && (
                 <>
             {/* Summary Rating Box */}
-            <View style={styles.summaryBox}>
-                <View style={styles.scoreCol}>
-                    <Text style={styles.scoreNumber}>{product.rating.toFixed(1)}</Text>
-                    {renderStars(Math.round(product.rating), 18)}
-                    <Text style={styles.scoreSub}>
-                        {language === 'fr'
-                            ? `Basé sur ${product.reviewsCount + reviews.length - 3} avis`
-                            : `Based on ${product.reviewsCount + reviews.length - 3} reviews`}
-                    </Text>
+            {reviewCount > 0 ? (
+                <View style={styles.summaryBox}>
+                    <View style={styles.scoreCol}>
+                        <Text style={styles.scoreNumber}>{reviewAverage.toFixed(1)}</Text>
+                        {renderStars(Math.round(reviewAverage), 18)}
+                        <Text style={styles.scoreSub}>
+                            {language === 'fr'
+                                ? `Basé sur ${reviewCount} avis`
+                                : `Based on ${reviewCount} reviews`}
+                        </Text>
+                    </View>
                 </View>
-
-                <View style={styles.dividerCol} />
-
-                {/* Rating Bars */}
-                <View style={styles.barsCol}>
-                    {[
-                        { stars: '5', percent: '88%' },
-                        { stars: '4', percent: '10%' },
-                        { stars: '3', percent: '2%' },
-                        { stars: '2', percent: '0%' },
-                        { stars: '1', percent: '0%' },
-                    ].map((bar) => (
-                        <View key={bar.stars} style={styles.barRow}>
-                            <Text style={styles.barLabel}>{bar.stars}</Text>
-                            <Ionicons name="star" size={11} color="#111111" />
-                            <View style={styles.barTrack}>
-                                <View style={[styles.barFill, { width: bar.percent as any }]} />
-                            </View>
-                            <Text style={styles.barPercent}>{bar.percent}</Text>
-                        </View>
-                    ))}
-                </View>
-            </View>
+            ) : (
+                <Text style={styles.scoreSub}>
+                    {language === 'fr' ? 'Aucun avis pour le moment.' : 'No reviews yet.'}
+                </Text>
+            )}
 
             {/* Write a Review Action */}
             <TouchableOpacity
@@ -149,7 +113,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({ product }) => {
             >
                 <Feather name="edit-3" size={16} color="#111111" />
                 <Text style={styles.writeReviewBtnText}>
-                    {showReviewForm ? 'CANCEL REVIEW' : 'WRITE A VERIFIED REVIEW'}
+                    {showReviewForm ? 'CANCEL REVIEW' : 'WRITE A REVIEW'}
                 </Text>
             </TouchableOpacity>
 

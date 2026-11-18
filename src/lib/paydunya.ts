@@ -122,7 +122,16 @@ export interface PayDunyaInvoiceResult {
     amountXOF?: number;
     invoiceToken?: string;
     paymentUrl?: string;
+    paymentStatus?: 'paid' | 'pending' | 'failed';
     error?: string;
+}
+
+export interface PayDunyaCardDetails {
+    fullName: string;
+    cardNumber: string;
+    cardCvv: string;
+    cardExpiredDateYear: string;
+    cardExpiredDateMonth: string;
 }
 
 async function callEdgeFunction(
@@ -134,9 +143,9 @@ async function callEdgeFunction(
 
         if (error instanceof FunctionsHttpError) {
             try {
-                const responseBody = await error.context.json() as { error?: unknown };
+                const responseBody = await error.context.json() as Record<string, unknown>;
                 if (typeof responseBody.error === 'string') {
-                    return { data: null, error: responseBody.error };
+                    return { data: responseBody, error: responseBody.error };
                 }
             } catch {
                 return {
@@ -210,19 +219,29 @@ export async function initiatePayDunyaPayment(
 
 export async function initiatePayDunyaCardPayment(
     orderId: string,
-    customerName: string
+    cardDetails: PayDunyaCardDetails
 ): Promise<PayDunyaInvoiceResult> {
     const { data, error } = await callEdgeFunction('paydunya-checkout', {
         action: 'card-checkout',
         orderId,
-        customerName,
+        ...cardDetails,
     });
-    if (error) return { success: false, error };
+    if (error) {
+        return {
+            success: false,
+            error,
+            amountXOF: typeof data?.amountXOF === 'number' ? data.amountXOF : undefined,
+            invoiceToken: typeof data?.invoiceToken === 'string' ? data.invoiceToken : undefined,
+            paymentStatus: data?.paymentStatus === 'pending' ? 'pending' : undefined,
+        };
+    }
     if (
-        typeof data?.message !== 'string'
+        data?.success !== true
+        || typeof data?.message !== 'string'
         || typeof data.amountXOF !== 'number'
-        || typeof data.paymentUrl !== 'string'
         || typeof data.invoiceToken !== 'string'
+        || (data.paymentStatus !== 'paid' && data.paymentStatus !== 'pending' && data.paymentStatus !== 'failed')
+        || (data.paymentUrl !== undefined && typeof data.paymentUrl !== 'string')
     ) {
         return { success: false, error: 'Le service de paiement par carte a renvoyé une réponse invalide.' };
     }
@@ -231,7 +250,8 @@ export async function initiatePayDunyaCardPayment(
         message: data.message,
         amountXOF: data.amountXOF,
         invoiceToken: data.invoiceToken,
-        paymentUrl: data.paymentUrl,
+        paymentUrl: typeof data.paymentUrl === 'string' ? data.paymentUrl : undefined,
+        paymentStatus: data.paymentStatus,
     };
 }
 

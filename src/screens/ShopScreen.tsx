@@ -121,8 +121,8 @@ export const ShopScreen: React.FC = () => {
 
     const recentBooks = readingBooks.length > 0
         ? readingBooks.slice(0, 5)
-        : products.filter((product) => product.isBestSeller).slice(0, 5);
-    const popularBooks = products.filter((product) => product.isBestSeller).slice(0, 4);
+        : products.slice(0, 5);
+    const popularBooks = products.slice(0, 4);
     const newBooks = filteredProducts.filter((product) => product.isNewIn);
     const displayedBooks = filterState.searchQuery || filterState.category !== 'ALL'
         ? filteredProducts
@@ -287,7 +287,10 @@ export const ShopScreen: React.FC = () => {
 
                             {sectionTitle('Explorer par thème')}
                             <View style={styles.categoryGrid}>
-                                {CATEGORIES.filter((category) => category.id !== 'ALL').map((category, index) => {
+                                {CATEGORIES.filter((category) => (
+                                    category.id !== 'ALL'
+                                    && products.some((product) => product.category === category.id)
+                                )).map((category, index) => {
                                     const count = products.filter((product) => product.category === category.id).length;
                                     const active = filterState.category === category.id;
                                     const icons: (keyof typeof Feather.glyphMap)[] = ['briefcase', 'trending-up', 'pie-chart', 'sun', 'monitor'];
@@ -362,10 +365,12 @@ export const ShopScreen: React.FC = () => {
                                         <View style={styles.popularInfo}>
                                             <AppText style={[styles.popularName, { color: palette.text }]} numberOfLines={2}>{product.name}</AppText>
                                             <AppText style={[styles.popularCategory, { color: palette.muted }]} numberOfLines={1}>{product.category}</AppText>
-                                            <View style={styles.popularRating}>
-                                                <Ionicons name="star" size={11} color={palette.accent} />
-                                                <AppText style={[styles.popularRatingText, { color: palette.text }]}>{product.rating.toFixed(1)}</AppText>
-                                            </View>
+                                            {product.rating > 0 ? (
+                                                <View style={styles.popularRating}>
+                                                    <Ionicons name="star" size={11} color={palette.accent} />
+                                                    <AppText style={[styles.popularRatingText, { color: palette.text }]}>{product.rating.toFixed(1)}</AppText>
+                                                </View>
+                                            ) : null}
                                         </View>
                                         <AppText style={[styles.popularPrice, { color: palette.accent }]}>{formatPrice(product.price)}</AppText>
                                     </TouchableOpacity>

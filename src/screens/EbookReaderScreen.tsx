@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { Feather } from '@expo/vector-icons';
 import { LocalizedText as Text } from '../context/LanguageContext';
 import { Header } from '../components/Header';
+import { EbookEditor } from '../components/EbookEditor';
 import { useShop } from '../context/ShopContext';
 import { getErrorMessage } from '../lib/supabase';
 
@@ -18,8 +18,13 @@ export const EbookReaderScreen: React.FC = () => {
         setUrl(null);
         setError(null);
         setLoading(true);
-        if (!selectedBook || !selectedBookOrderId) {
+        if (!selectedBook || (!selectedBookOrderId && selectedBook.price !== 0)) {
             setError('Aucun livre sélectionné. Ouvrez un ebook depuis Mes livres.');
+            setLoading(false);
+            return () => { mounted = false; };
+        }
+        if (!selectedBook.ebookStoragePath) {
+            setError('Le fichier de ce livre n’est pas encore disponible. Contactez le support.');
             setLoading(false);
             return () => { mounted = false; };
         }
@@ -37,7 +42,7 @@ export const EbookReaderScreen: React.FC = () => {
     }, [selectedBook, selectedBookOrderId, getEbookUrl]);
 
     const handleDownload = async () => {
-        if (!selectedBook || !selectedBookOrderId) return;
+        if (!selectedBook || (!selectedBookOrderId && selectedBook.price !== 0)) return;
         setError(null);
         try {
             const downloadUrl = await getEbookUrl(selectedBookOrderId, selectedBook.id, true);
@@ -51,9 +56,12 @@ export const EbookReaderScreen: React.FC = () => {
         <View style={styles.container}>
             <Header />
             <View style={styles.toolbar}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('account')}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigateTo(selectedBookOrderId ? 'account' : 'shop')}
+                >
                     <Feather name="arrow-left" size={17} color="#475569" />
-                    <Text style={styles.backText}>Mes livres</Text>
+                    <Text style={styles.backText}>{selectedBookOrderId ? 'Mes livres' : 'Boutique'}</Text>
                 </TouchableOpacity>
                 <Text style={styles.title} numberOfLines={1}>{selectedBook?.name || 'Lecture de l’ebook'}</Text>
                 <TouchableOpacity style={styles.downloadButton} onPress={() => void handleDownload()}>
@@ -70,10 +78,19 @@ export const EbookReaderScreen: React.FC = () => {
                 <ScrollView contentContainerStyle={styles.center}>
                     <Feather name="alert-circle" size={34} color="#b91c1c" />
                     <Text style={styles.error}>{error}</Text>
-                    <Text style={styles.helper}>Vérifiez que le PDF a bien été ajouté à la bibliothèque privée « ebooks ».</Text>
+                    <Text style={styles.helper}>Vérifiez que le fichier HTML, JSON ou PDF a bien été ajouté au bucket privé « ebooks ».</Text>
                 </ScrollView>
             ) : url ? (
-                <WebView source={{ uri: url }} style={styles.reader} />
+                <EbookEditor
+                    sourceUrl={url}
+                    format={selectedBook?.ebookFormat
+                        ?? (selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.json')
+                            ? 'json'
+                            : selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.html')
+                                || selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.htm')
+                                ? 'html'
+                                : 'pdf')}
+                />
             ) : null}
         </View>
     );
@@ -87,7 +104,6 @@ const styles = StyleSheet.create({
     title: { flex: 1, minWidth: 80, color: '#0f172a', fontWeight: '800', fontSize: 14 },
     downloadButton: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#6d28d9', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
     downloadText: { color: '#ffffff', fontWeight: '900', fontSize: 10 },
-    reader: { flex: 1, backgroundColor: '#ffffff' },
     center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 12 },
     helper: { color: '#64748b', fontSize: 13, lineHeight: 20, textAlign: 'center', maxWidth: 420 },
     error: { color: '#b91c1c', fontSize: 15, fontWeight: '800', textAlign: 'center', lineHeight: 22 },

@@ -51,8 +51,8 @@ interface ShopContextType {
     removePromoCode: () => void;
     placeOrder: (shippingInfo: Order['shippingAddress'], paymentMethod: Order['paymentMethod']) => Promise<Order | null>;
     confirmOrderPayment: (orderId: string) => Promise<Order['paymentStatus']>;
-    openBook: (product: Product, orderId: string) => void;
-    getEbookUrl: (orderId: string, productId: string, download?: boolean) => Promise<string>;
+    openBook: (product: Product, orderId?: string) => void;
+    getEbookUrl: (orderId: string | null, productId: string, download?: boolean) => Promise<string>;
     updateOrderPaymentMethod: (orderId: string, paymentMethod: Order['paymentMethod']) => Promise<void>;
     updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
     addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
@@ -76,6 +76,9 @@ const initialFilterState: FilterState = {
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 const CURRENCY_STORAGE_KEY = '@zone-de-papy/currency';
+const resolveProductImage = (image: string) => /^https?:\/\//i.test(image)
+    ? image
+    : supabase.storage.from('product-images').getPublicUrl(image).data.publicUrl;
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { language } = useLanguage();
@@ -162,8 +165,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const [cart, setCart] = useState<CartItem[]>([]);
     const [wishlist, setWishlist] = useState<string[]>([]);
-    const [activeScreen, setActiveScreen] = useState<ScreenName>('shop');
-    const [selectedProduct, setSelectedProduct] = useState<Product | null>(PRODUCTS[0]);
+    const [activeScreen, setActiveScreen] = useState<ScreenName>(() =>
+        typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/admin'
+            ? 'admin'
+            : 'shop'
+    );
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [currency, setCurrency] = useState<Currency>(CURRENCIES[0]);
     const currencyChangedDuringLoad = useRef(false);
     const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
@@ -261,12 +268,24 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (mounted) {
                     const categoryIds = new Set(CATEGORIES.map((category) => category.id));
                     const catalogProducts = (data || [])
-                        .map((row) => ({ ...row.data, id: row.id } as Product))
-                        .filter((product) => categoryIds.has(product.category));
-                    setProductList(catalogProducts.length > 0 ? catalogProducts : PRODUCTS);
+                        .map((row) => {
+                            const product = { ...row.data, id: row.id } as Product;
+                            return {
+                                ...product,
+                                images: product.images.map(resolveProductImage),
+                                backgroundImage: product.backgroundImage
+                                    ? resolveProductImage(product.backgroundImage)
+                                    : undefined,
+                            };
+                        })
+                        .filter((product) => !product.isHidden && categoryIds.has(product.category));
+                    setProductList(catalogProducts);
                 }
             } catch (error) {
-                if (mounted) reportBackendError(error);
+                if (mounted) {
+                    setProductList([]);
+                    reportBackendError(error);
+                }
             }
         };
 
@@ -316,9 +335,22 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const navigateTo = (screen: ScreenName) => {
         setActiveScreen(screen);
         if (typeof window !== 'undefined') {
+            const nextPath = screen === 'admin' ? '/admin' : '/';
+            if (window.location.pathname !== nextPath) {
+                window.history.pushState(null, '', nextPath);
+            }
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const syncScreenWithPath = () => {
+            setActiveScreen(window.location.pathname.replace(/\/+$/, '') === '/admin' ? 'admin' : 'shop');
+        };
+        window.addEventListener('popstate', syncScreenWithPath);
+        return () => window.removeEventListener('popstate', syncScreenWithPath);
+    }, []);
 
     const openProductDetail = (product: Product) => {
         setSelectedProduct(product);
@@ -470,26 +502,34 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFilterState(initialFilterState);
     };
 
-    const [productList, setProductList] = useState<Product[]>(PRODUCTS);
+    const [productList, setProductList] = useState<Product[]>(PRODUCTS.filter((product) => !product.isHidden));
     const [orders, setOrders] = useState<Order[]>([]);
 
-    const openBook = (product: Product, orderId: string) => {
+    const openBook = (product: Product, orderId?: string) => {
         if (!user) {
             setShowAuthModal(true);
             return;
         }
+        if (product.price !== 0 && !orderId) {
+            setBackendError('Achetez ce livre pour accéder à sa lecture.');
+            return;
+        }
         setSelectedBook(product);
-        setSelectedBookOrderId(orderId);
+        setSelectedBookOrderId(orderId ?? null);
         navigateTo('reader');
     };
 
-    const getEbookUrl = async (orderId: string, productId: string, download = false) => {
+    const getEbookUrl = async (orderId: string | null, productId: string, download = false) => {
         if (!user) {
             setShowAuthModal(true);
             throw new Error('Connectez-vous pour accéder à vos livres.');
         }
-        const order = orders.find((item) => item.id === orderId && item.paymentStatus === 'paid' && item.paymentVerified);
-        const purchasedProduct = order?.items.find((item) => item.product.id === productId)?.product;
+        const catalogProduct = productList.find((item) => item.id === productId);
+        const order = orderId
+            ? orders.find((item) => item.id === orderId && item.paymentStatus === 'paid' && item.paymentVerified)
+            : null;
+        const purchasedProduct = order?.items.find((item) => item.product.id === productId)?.product
+            ?? (catalogProduct?.price === 0 ? catalogProduct : undefined);
         if (!purchasedProduct) {
             throw new Error('Ce livre n’est pas disponible dans vos achats confirmés.');
         }

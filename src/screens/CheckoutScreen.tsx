@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    AppState,
     ActivityIndicator,
     Linking,
     ScrollView,
@@ -39,11 +40,23 @@ export const CheckoutScreen: React.FC = () => {
     const [operatorKey, setOperatorKey] = useState('tmoney-tg');
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
+    const [cardholderName, setCardholderName] = useState('');
+    const [cardNumber, setCardNumber] = useState('');
+    const [cardExpiry, setCardExpiry] = useState('');
+    const [cardCvv, setCardCvv] = useState('');
     const [paymentType, setPaymentType] = useState<'card' | 'mobile'>('card');
     const [order, setOrder] = useState<Order | null>(null);
     const [busy, setBusy] = useState(false);
+    const [autoCheckPayment, setAutoCheckPayment] = useState(false);
+    const [checkingPayment, setCheckingPayment] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [message, setMessage] = useState<string | null>(null);
+    const confirmPaymentRef = useRef(confirmOrderPayment);
+    const navigateToRef = useRef(navigateTo);
+    const checkingPaymentRef = useRef(false);
+    const paymentHandledRef = useRef(false);
+    confirmPaymentRef.current = confirmOrderPayment;
+    navigateToRef.current = navigateTo;
 
     const country = PAYDUNYA_COUNTRIES.find((item) => item.id === countryId) ?? PAYDUNYA_COUNTRIES[0];
     const operator = country.operators.find((item) => item.key === operatorKey) ?? country.operators[0];
@@ -57,9 +70,60 @@ export const CheckoutScreen: React.FC = () => {
         if (!authLoading && !user) setShowAuthModal(true);
     }, [authLoading, user, setShowAuthModal]);
 
+    useEffect(() => {
+        if (!order?.id || !autoCheckPayment) return;
+        let active = true;
+        const checkPayment = async () => {
+            if (!active || checkingPaymentRef.current || paymentHandledRef.current) return;
+            checkingPaymentRef.current = true;
+            setCheckingPayment(true);
+            try {
+                const status = await confirmPaymentRef.current(order.id);
+                if (!active) return;
+                if (status === 'paid') {
+                    paymentHandledRef.current = true;
+                    setAutoCheckPayment(false);
+                    setMessage('Paiement confirmé par PayDunya. Votre bibliothèque est maintenant accessible.');
+                    navigateToRef.current('order-success');
+                } else if (status === 'failed') {
+                    paymentHandledRef.current = true;
+                    setAutoCheckPayment(false);
+                    setOrder((current) => current ? { ...current, paymentStatus: 'failed' } : null);
+                    setError('Le paiement a échoué ou a été annulé. Vous pouvez réessayer.');
+                } else if (status === 'initiating') {
+                    paymentHandledRef.current = true;
+                    setAutoCheckPayment(false);
+                    setError('Le paiement n’a pas été démarré. Vérifiez vos informations puis réessayez.');
+                } else if (status === 'pending') {
+                    setError(null);
+                    setMessage('Vérification automatique en cours. Vos ebooks seront débloqués dès la confirmation de PayDunya.');
+                }
+            } catch (paymentError) {
+                if (active) setError(getErrorMessage(paymentError));
+            } finally {
+                checkingPaymentRef.current = false;
+                if (active) setCheckingPayment(false);
+            }
+        };
+        void checkPayment();
+        const interval = setInterval(() => {
+            if (AppState.currentState === 'active') void checkPayment();
+        }, 5000);
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') void checkPayment();
+        });
+        return () => {
+            active = false;
+            clearInterval(interval);
+            subscription.remove();
+        };
+    }, [order?.id, autoCheckPayment]);
+
     const handlePay = async () => {
         setError(null);
         setMessage(null);
+        setAutoCheckPayment(false);
+        paymentHandledRef.current = false;
         if (!user) {
             setShowAuthModal(true);
             return;
@@ -70,6 +134,10 @@ export const CheckoutScreen: React.FC = () => {
         }
         let paymentMethod: Order['paymentMethod'] = 'card';
         let formattedPhone = '';
+        let normalizedCardNumber = '';
+        let normalizedCardCvv = '';
+        let cardExpiryMonth = '';
+        let cardExpiryYear = '';
         if (paymentType === 'mobile') {
             formattedPhone = formatPayDunyaPhone(phone, country, operator.key) || '';
             if (!formattedPhone) {
@@ -85,6 +153,31 @@ export const CheckoutScreen: React.FC = () => {
                 : operator.key === 'flooz-tg'
                     ? 'flooz'
                     : 'paydunya';
+        } else {
+            normalizedCardNumber = cardNumber.replace(/\D/g, '');
+            normalizedCardCvv = cardCvv.replace(/\D/g, '');
+            const cardExpiryParts = cardExpiry.match(/^(0[1-9]|1[0-2])\/(\d{2})$/);
+            const cardName = cardholderName.trim() || user.name.trim();
+            const currentDate = new Date();
+            const expiryYear = cardExpiryParts ? 2000 + Number(cardExpiryParts[2]) : 0;
+            const expiryMonth = cardExpiryParts ? Number(cardExpiryParts[1]) : 0;
+            const expired = cardExpiryParts
+                && (expiryYear < currentDate.getFullYear()
+                    || (expiryYear === currentDate.getFullYear() && expiryMonth < currentDate.getMonth() + 1));
+            if (
+                !cardName
+                || normalizedCardNumber.length < 12
+                || normalizedCardNumber.length > 19
+                || !cardExpiryParts
+                || expired
+                || normalizedCardCvv.length < 3
+                || normalizedCardCvv.length > 4
+            ) {
+                setError('Vérifiez le nom, le numéro de carte, la date d’expiration et le cryptogramme.');
+                return;
+            }
+            cardExpiryMonth = cardExpiryParts[1];
+            cardExpiryYear = cardExpiryParts[2];
         }
 
         setBusy(true);
@@ -94,16 +187,30 @@ export const CheckoutScreen: React.FC = () => {
             setOrder(currentOrder);
 
             if (paymentType === 'card') {
-                const result = await initiatePayDunyaCardPayment(currentOrder.id, user.name);
-                if (!result.success || !result.paymentUrl) {
+                const result = await initiatePayDunyaCardPayment(currentOrder.id, {
+                    fullName: cardholderName.trim() || user.name,
+                    cardNumber: normalizedCardNumber,
+                    cardCvv: normalizedCardCvv,
+                    cardExpiredDateMonth: cardExpiryMonth,
+                    cardExpiredDateYear: cardExpiryYear,
+                });
+                if (!result.success || !result.invoiceToken) {
+                    if (result.paymentStatus === 'pending' && result.invoiceToken) {
+                        setMessage('Le statut du paiement est incertain. Vérification automatique en cours avant tout nouvel essai.');
+                        setAutoCheckPayment(true);
+                    }
                     throw new Error(result.error || 'Le paiement par carte n’a pas pu être démarré.');
                 }
-                const paymentUrl = new URL(result.paymentUrl);
-                if (paymentUrl.protocol !== 'https:') {
-                    throw new Error('Le lien de paiement PayDunya est invalide.');
+                setMessage(result.message || `Paiement par carte envoyé. Montant : ${result.amountXOF?.toLocaleString()} FCFA. Vérification automatique en cours.`);
+                setAutoCheckPayment(true);
+                if (result.paymentUrl) {
+                    const paymentUrl = new URL(result.paymentUrl);
+                    if (paymentUrl.protocol !== 'https:' || !/(^|\.)paydunya\.com$/i.test(paymentUrl.hostname)) {
+                        throw new Error('Le lien de vérification bancaire est invalide.');
+                    }
+                    setMessage('Une vérification 3-D Secure de votre banque est nécessaire pour finaliser le paiement.');
+                    await Linking.openURL(paymentUrl.toString());
                 }
-                await Linking.openURL(paymentUrl.toString());
-                setMessage(`Paiement sécurisé par carte ouvert. Montant : ${result.amountXOF?.toLocaleString()} FCFA. Revenez ici après le paiement pour vérifier sa confirmation.`);
                 return;
             }
 
@@ -121,6 +228,8 @@ export const CheckoutScreen: React.FC = () => {
             if (!result.success) {
                 throw new Error(result.error || 'Le paiement n’a pas pu être démarré.');
             }
+            setMessage(`${result.message} Montant : ${result.amountXOF?.toLocaleString()} FCFA. La confirmation sera vérifiée automatiquement.`);
+            setAutoCheckPayment(true);
             if (result.paymentUrl) {
                 const paymentUrl = new URL(result.paymentUrl);
                 if (paymentUrl.protocol !== 'https:') {
@@ -128,38 +237,15 @@ export const CheckoutScreen: React.FC = () => {
                 }
                 await Linking.openURL(paymentUrl.toString());
             }
-            setMessage(`${result.message} Montant : ${result.amountXOF?.toLocaleString()} FCFA. Après validation sur votre téléphone, vérifiez le paiement ici.`);
         } catch (paymentError) {
             setError(getErrorMessage(paymentError));
         } finally {
             setBusy(false);
-        }
-    };
-
-    const handleCheckPayment = async () => {
-        if (!order) return;
-        setBusy(true);
-        setError(null);
-        try {
-            const status = await confirmOrderPayment(order.id);
-            if (status === 'paid') {
-                navigateTo('order-success');
-                return;
+            if (paymentType === 'card') {
+                setCardNumber('');
+                setCardExpiry('');
+                setCardCvv('');
             }
-            if (status === 'failed') {
-                setError('Le paiement a échoué ou a été annulé. Vous pouvez réessayer.');
-                setOrder((current) => current ? { ...current, paymentStatus: 'failed' } : null);
-                return;
-            }
-            setMessage(status === 'pending'
-                ? 'Le paiement est toujours en attente. Validez la demande sur votre téléphone puis réessayez.'
-                : status === 'unverified'
-                    ? 'Le statut de cette ancienne commande ne peut pas être vérifié. Contactez le support avant tout nouvel achat.'
-                    : 'Aucune facture de paiement n’a encore été créée. Vous pouvez relancer le paiement.');
-        } catch (paymentError) {
-            setError(getErrorMessage(paymentError));
-        } finally {
-            setBusy(false);
         }
     };
 
@@ -211,7 +297,12 @@ export const CheckoutScreen: React.FC = () => {
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.paymentChoice, paymentType === 'mobile' && styles.paymentChoiceActive]}
-                            onPress={() => setPaymentType('mobile')}
+                            onPress={() => {
+                                setPaymentType('mobile');
+                                setCardNumber('');
+                                setCardExpiry('');
+                                setCardCvv('');
+                            }}
                         >
                             <Feather name="smartphone" size={20} color={paymentType === 'mobile' ? '#6d28d9' : '#64748b'} />
                             <View style={styles.choiceTextGroup}>
@@ -282,18 +373,72 @@ export const CheckoutScreen: React.FC = () => {
                     )}
                     </>
                     ) : (
-                        <Text style={styles.cardInfo}>Vous serez redirigé vers la page officielle PayDunya pour saisir les informations de votre carte. Secret d’Ange ne conserve aucune donnée bancaire.</Text>
+                        <>
+                            <Text style={styles.helper}>Saisissez les informations de votre carte sur cette page. Une authentification 3-D Secure peut être demandée par votre banque.</Text>
+                            <Text style={styles.label}>Nom sur la carte</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={cardholderName}
+                                onChangeText={setCardholderName}
+                                autoCapitalize="words"
+                                placeholder={user?.name || 'Nom complet'}
+                                editable={!busy}
+                            />
+                            <Text style={styles.label}>Numéro de carte</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={cardNumber}
+                                onChangeText={setCardNumber}
+                                keyboardType="number-pad"
+                                placeholder="1234 5678 9012 3456"
+                                maxLength={23}
+                                editable={!busy}
+                            />
+                            <View style={styles.cardInputRow}>
+                                <View style={styles.cardInputGroup}>
+                                    <Text style={styles.label}>Expiration (MM/AA)</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={cardExpiry}
+                                        onChangeText={(value) => {
+                                            const digits = value.replace(/\D/g, '').slice(0, 4);
+                                            setCardExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
+                                        }}
+                                        keyboardType="number-pad"
+                                        placeholder="MM/AA"
+                                        maxLength={5}
+                                        editable={!busy}
+                                    />
+                                </View>
+                                <View style={styles.cardInputGroup}>
+                                    <Text style={styles.label}>Cryptogramme</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={cardCvv}
+                                        onChangeText={(value) => setCardCvv(value.replace(/\D/g, '').slice(0, 4))}
+                                        keyboardType="number-pad"
+                                        secureTextEntry
+                                        placeholder="CVV"
+                                        maxLength={4}
+                                        editable={!busy}
+                                    />
+                                </View>
+                            </View>
+                            <Text style={styles.cardInfo}>Les données de carte sont transmises à PayDunya pour le traitement et ne sont pas enregistrées dans la base de l’application.</Text>
+                        </>
                     )}
 
                     <TouchableOpacity
-                        style={[styles.primaryButton, busy && styles.disabledButton]}
+                        style={[styles.primaryButton, (busy || autoCheckPayment) && styles.disabledButton]}
                         onPress={handlePay}
-                        disabled={busy}
+                        disabled={busy || autoCheckPayment}
                     >
-                        {busy ? <ActivityIndicator color="#ffffff" /> : <Feather name="lock" size={17} color="#ffffff" />}
+                        {busy || autoCheckPayment ? <ActivityIndicator color="#ffffff" /> : <Feather name="lock" size={17} color="#ffffff" />}
                         <Text style={styles.primaryButtonText}>
                             {busy
                                 ? 'TRAITEMENT…'
+                                : autoCheckPayment
+                                    ? 'PAIEMENT EN COURS…'
                                 : order
                                     ? 'RÉESSAYER LE PAIEMENT'
                                     : paymentType === 'card'
@@ -302,11 +447,13 @@ export const CheckoutScreen: React.FC = () => {
                         </Text>
                     </TouchableOpacity>
 
-                    {order && (
-                        <TouchableOpacity style={styles.checkButton} onPress={handleCheckPayment} disabled={busy}>
-                            <Feather name="check-circle" size={17} color="#6d28d9" />
-                            <Text style={styles.checkButtonText}>J’ai payé — vérifier la confirmation</Text>
-                        </TouchableOpacity>
+                    {autoCheckPayment && (
+                        <View style={styles.checkButton}>
+                            {checkingPayment
+                                ? <ActivityIndicator size="small" color="#6d28d9" />
+                                : <Feather name="refresh-cw" size={17} color="#6d28d9" />}
+                            <Text style={styles.checkButtonText}>Vérification automatique du paiement…</Text>
+                        </View>
                     )}
                     {error ? <Text style={styles.error}>{error}</Text> : null}
                     {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -354,6 +501,8 @@ const styles = StyleSheet.create({
     prefix: { color: '#6d28d9', fontWeight: '800', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingRight: 12 },
     phoneInput: { flex: 1, color: '#0f172a', paddingHorizontal: 12, paddingVertical: 12, fontSize: 15 },
     input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: '#0f172a', marginBottom: 14 },
+    cardInputRow: { flexDirection: 'row', gap: 12 },
+    cardInputGroup: { flex: 1 },
     primaryButton: { minHeight: 50, backgroundColor: '#6d28d9', borderRadius: 14, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
     disabledButton: { opacity: 0.65 },
     primaryButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },

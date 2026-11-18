@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { AppState, Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LocalizedText as Text, useLanguage } from '../context/LanguageContext';
 import { Header } from '../components/Header';
@@ -33,25 +33,52 @@ export const AccountScreen: React.FC = () => {
     const [activeTab, setActiveTab] = useState<AccountTab>('library');
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const [paymentCheckError, setPaymentCheckError] = useState<string | null>(null);
-    const checkedPaymentOrders = useRef(new Set<string>());
+    const checkingPaymentOrders = useRef(new Set<string>());
+    const confirmOrderPaymentRef = useRef(confirmOrderPayment);
+    confirmOrderPaymentRef.current = confirmOrderPayment;
     const { language, setLanguage } = useLanguage();
 
+    const pendingPaymentOrderIds = orders
+        .filter((order) => (
+            isEbookOrder(order)
+            && (order.paymentStatus === 'pending' || order.paymentStatus === 'initiating')
+            && ['card', 'paydunya', 'tmoney', 'flooz'].includes(order.paymentMethod)
+        ))
+        .map((order) => order.id);
+    const pendingPaymentOrderKey = pendingPaymentOrderIds.join(':');
+
     useEffect(() => {
-        orders
-            .filter((order) => (
-                isEbookOrder(order)
-                &&
-                (order.paymentStatus === 'pending' || order.paymentStatus === 'initiating')
-                && ['card', 'paydunya', 'tmoney', 'flooz'].includes(order.paymentMethod)
-            ))
-            .forEach((order) => {
-                if (checkedPaymentOrders.current.has(order.id)) return;
-                checkedPaymentOrders.current.add(order.id);
-                void confirmOrderPayment(order.id).catch((error: unknown) => {
-                    setPaymentCheckError(getErrorMessage(error));
-                });
+        if (pendingPaymentOrderIds.length === 0) return;
+        let active = true;
+        const checkPendingPayments = () => {
+            pendingPaymentOrderIds.forEach((orderId) => {
+                if (checkingPaymentOrders.current.has(orderId)) return;
+                checkingPaymentOrders.current.add(orderId);
+                void confirmOrderPaymentRef.current(orderId)
+                    .then(() => {
+                        if (active) setPaymentCheckError(null);
+                    })
+                    .catch((error: unknown) => {
+                        if (active) setPaymentCheckError(getErrorMessage(error));
+                    })
+                    .finally(() => {
+                        checkingPaymentOrders.current.delete(orderId);
+                    });
             });
-    }, [orders, confirmOrderPayment]);
+        };
+        checkPendingPayments();
+        const interval = setInterval(() => {
+            if (AppState.currentState === 'active') checkPendingPayments();
+        }, 15000);
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') checkPendingPayments();
+        });
+        return () => {
+            active = false;
+            clearInterval(interval);
+            subscription.remove();
+        };
+    }, [pendingPaymentOrderKey]);
 
     const purchasedBooks = useMemo(() => {
         const books: PurchasedBook[] = [];
