@@ -54,6 +54,7 @@ export const CheckoutScreen: React.FC = () => {
     const [cardExpiry, setCardExpiry] = useState('');
     const [cardCvv, setCardCvv] = useState('');
     const [paymentType, setPaymentType] = useState<'card' | 'mobile'>('card');
+    const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
     const [order, setOrder] = useState<Order | null>(null);
     const [busy, setBusy] = useState(false);
     const [autoCheckPayment, setAutoCheckPayment] = useState(false);
@@ -273,234 +274,298 @@ export const CheckoutScreen: React.FC = () => {
                     <Text style={styles.subtitle}>Après confirmation du paiement, vos ebooks seront disponibles dans « Mes livres ».</Text>
                 </View>
 
-                {cart.length > 0 && (
-                    <View style={styles.card}>
-                        <Text style={styles.cardTitle}>Votre sélection</Text>
-                        {cart.map((item) => (
-                            <View key={item.product.id} style={styles.line}>
-                                <Text style={styles.lineName}>{item.product.name}</Text>
-                                <Text style={styles.linePrice}>{formatPrice(item.product.price * item.quantity)}</Text>
+                <View style={styles.stepper}>
+                    {[
+                        { number: 1, label: 'Commande' },
+                        { number: 2, label: 'Paiement' },
+                        { number: 3, label: 'Confirmation' },
+                    ].map((step) => (
+                        <View key={step.number} style={styles.stepItem}>
+                            <View style={[styles.stepNumber, checkoutStep >= step.number && styles.stepNumberActive]}>
+                                {checkoutStep > step.number
+                                    ? <Feather name="check" size={14} color="#ffffff" />
+                                    : <Text style={[styles.stepNumberText, checkoutStep === step.number && styles.stepNumberTextActive]}>{step.number}</Text>}
                             </View>
-                        ))}
-                        <View style={styles.separator} />
-                        <View style={styles.line}>
-                            <Text style={styles.totalLabel}>Total</Text>
-                            <Text style={styles.total}>{formatPrice(cartTotal || cartSubtotal)}</Text>
+                            <Text style={[styles.stepLabel, checkoutStep === step.number && styles.stepLabelActive]}>{step.label}</Text>
                         </View>
-                    </View>
+                    ))}
+                </View>
+
+                {checkoutStep === 1 && (
+                    <>
+                        <View style={styles.card}>
+                            <Text style={styles.cardTitle}>1. Vérifiez votre commande</Text>
+                            {cart.length > 0 ? cart.map((item) => (
+                                <View key={item.product.id} style={styles.line}>
+                                    <Text style={styles.lineName}>{item.product.name}</Text>
+                                    <Text style={styles.linePrice}>{formatPrice(item.product.price * item.quantity)}</Text>
+                                </View>
+                            )) : (
+                                <Text style={styles.helper}>Votre panier est vide. Retournez à la boutique pour choisir un ebook.</Text>
+                            )}
+                            <View style={styles.separator} />
+                            <View style={styles.line}>
+                                <Text style={styles.totalLabel}>Total à payer</Text>
+                                <Text style={styles.total}>{formatPrice(cartTotal || cartSubtotal)}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity
+                            style={[styles.primaryButton, cart.length === 0 && styles.disabledButton]}
+                            disabled={cart.length === 0}
+                            onPress={() => setCheckoutStep(2)}
+                        >
+                            <Text style={styles.primaryButtonText}>CONTINUER VERS LE PAIEMENT</Text>
+                            <Feather name="arrow-right" size={17} color="#ffffff" />
+                        </TouchableOpacity>
+                    </>
                 )}
 
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Choisissez votre mode de paiement</Text>
-                    <View style={[styles.paymentChoices, isNarrowScreen && styles.paymentChoicesStacked]}>
-                        <TouchableOpacity
-                            style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'card' && styles.paymentChoiceActive]}
-                            onPress={() => setPaymentType('card')}
-                        >
-                            <View style={[styles.paymentIcon, paymentType === 'card' && styles.paymentIconActive]}>
-                                <Feather name="credit-card" size={20} color={paymentType === 'card' ? '#6d28d9' : '#64748b'} />
-                            </View>
-                            <View style={styles.choiceTextGroup}>
-                                <Text style={styles.choiceTitle}>Carte bancaire</Text>
-                                <Text style={styles.choiceSubtitle}>Paiement sécurisé par carte</Text>
-                            </View>
-                            {paymentType === 'card' && <Feather name="check-circle" size={17} color="#6d28d9" />}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'mobile' && styles.paymentChoiceActive]}
-                            onPress={() => {
-                                setPaymentType('mobile');
-                                setCardNumber('');
-                                setCardExpiry('');
-                                setCardCvv('');
-                            }}
-                        >
-                            <View style={[styles.paymentIcon, paymentType === 'mobile' && styles.paymentIconActive]}>
-                                <Feather name="smartphone" size={20} color={paymentType === 'mobile' ? '#6d28d9' : '#64748b'} />
-                            </View>
-                            <View style={styles.choiceTextGroup}>
-                                <Text style={styles.choiceTitle}>Mobile Money</Text>
-                                <Text style={styles.choiceSubtitle}>Opérateurs disponibles selon votre pays</Text>
-                            </View>
-                            {paymentType === 'mobile' && <Feather name="check-circle" size={17} color="#6d28d9" />}
-                        </TouchableOpacity>
-                    </View>
-
-                    {paymentType === 'mobile' ? (
+                {checkoutStep === 2 && (
                     <>
-                    <Text style={styles.helper}>Choisissez votre pays et votre opérateur, puis confirmez la demande sur votre téléphone.</Text>
-                    {detectedCountry ? (
-                        <View style={styles.detectedNotice}>
-                            <Feather name="map-pin" size={15} color="#6d28d9" />
-                            <Text style={styles.detectedNoticeText}>
-                                Pays détecté : <Text style={styles.detectedCountryName}>{detectedCountry.name}</Text>
-                            </Text>
-                            <Text style={styles.detectedNoticeHint}>modifiable</Text>
-                        </View>
-                    ) : null}
-                    <Text style={styles.sectionLabel}>Votre pays</Text>
-                    <View style={styles.countryGrid}>
-                        {PAYDUNYA_COUNTRIES.map((item) => (
-                            <TouchableOpacity
-                                key={item.id}
-                                accessibilityRole="button"
-                                accessibilityState={{ selected: countryId === item.id }}
-                                style={[styles.countryButton, countryId === item.id && styles.optionActive]}
-                                onPress={() => {
-                                    setCountryId(item.id);
-                                    setOperatorKey(item.operators[0].key);
-                                }}
-                            >
-                                <Text style={styles.countryFlag}>{item.flag}</Text>
-                                <View style={styles.countryCopy}>
-                                    <Text style={[styles.countryName, countryId === item.id && styles.optionTextActive]} numberOfLines={1}>
-                                        {item.name}
-                                    </Text>
-                                </View>
-                                {item.id === detectedCountry?.id ? (
-                                    <Feather name="crosshair" size={13} color={countryId === item.id ? '#6d28d9' : '#94a3b8'} />
-                                ) : null}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <Text style={styles.sectionLabel}>Opérateur</Text>
-                    <View style={styles.operatorList}>
-                        {country.operators.map((item) => (
-                            <TouchableOpacity
-                                key={item.key}
-                                accessibilityRole="button"
-                                accessibilityState={{ selected: operatorKey === item.key }}
-                                style={[styles.operatorButton, operatorKey === item.key && styles.optionActive]}
-                                onPress={() => setOperatorKey(item.key)}
-                            >
-                                <View style={[styles.operatorMark, { backgroundColor: item.color }]}>
-                                    <Text style={[styles.operatorMarkText, { color: item.textColor || '#ffffff' }]}>
-                                        {item.short}
-                                    </Text>
-                                </View>
-                                <View style={styles.operatorCopy}>
-                                    <Text style={[styles.operatorName, operatorKey === item.key && styles.optionTextActive]} numberOfLines={1}>
-                                        {item.name}
-                                    </Text>
-                                    <Text style={styles.operatorCaption}>Mobile Money</Text>
-                                </View>
-                                {operatorKey === item.key ? <Feather name="check-circle" size={16} color="#6d28d9" /> : null}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <Text style={styles.label}>Numéro {operator.name}</Text>
-                    <View style={styles.phoneRow}>
-                        <Text style={styles.prefix}>{country.dialCode}</Text>
-                        <TextInput
-                            style={styles.phoneInput}
-                            value={phone}
-                            onChangeText={setPhone}
-                            keyboardType="phone-pad"
-                            placeholder={phoneRules.example}
-                        />
-                    </View>
-
-                    {requiresPayDunyaOtp(operator.key) && (
-                        <>
-                            <Text style={styles.label}>Code de paiement</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={otp}
-                                onChangeText={setOtp}
-                                secureTextEntry
-                                placeholder="Code demandé par l’opérateur"
-                            />
-                        </>
-                    )}
-                    </>
-                    ) : (
-                        <>
-                            <Text style={styles.helper}>Saisissez les informations de votre carte sur cette page. Une authentification 3-D Secure peut être demandée par votre banque.</Text>
-                            <Text style={styles.label}>Nom sur la carte</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={cardholderName}
-                                onChangeText={setCardholderName}
-                                autoCapitalize="words"
-                                placeholder={user?.name || 'Nom complet'}
-                                editable={!busy}
-                            />
-                            <Text style={styles.label}>Numéro de carte</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={cardNumber}
-                                onChangeText={setCardNumber}
-                                keyboardType="number-pad"
-                                placeholder="1234 5678 9012 3456"
-                                maxLength={23}
-                                editable={!busy}
-                            />
-                            <View style={styles.cardInputRow}>
-                                <View style={styles.cardInputGroup}>
-                                    <Text style={styles.label}>Expiration (MM/AA)</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        value={cardExpiry}
-                                        onChangeText={(value) => {
-                                            const digits = value.replace(/\D/g, '').slice(0, 4);
-                                            setCardExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
-                                        }}
-                                        keyboardType="number-pad"
-                                        placeholder="MM/AA"
-                                        maxLength={5}
-                                        editable={!busy}
-                                    />
-                                </View>
-                                <View style={styles.cardInputGroup}>
-                                    <Text style={styles.label}>Cryptogramme</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        value={cardCvv}
-                                        onChangeText={(value) => setCardCvv(value.replace(/\D/g, '').slice(0, 4))}
-                                        keyboardType="number-pad"
-                                        secureTextEntry
-                                        placeholder="CVV"
-                                        maxLength={4}
-                                        editable={!busy}
-                                    />
-                                </View>
+                        <View style={styles.card}>
+                            <Text style={styles.cardTitle}>2. Choisissez votre moyen de paiement</Text>
+                            <View style={[styles.paymentChoices, isNarrowScreen && styles.paymentChoicesStacked]}>
+                                <TouchableOpacity
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: paymentType === 'card' }}
+                                    style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'card' && styles.paymentChoiceActive]}
+                                    onPress={() => setPaymentType('card')}
+                                >
+                                    <View style={[styles.paymentIcon, paymentType === 'card' && styles.paymentIconActive]}>
+                                        <Feather name="credit-card" size={20} color={paymentType === 'card' ? '#6d28d9' : '#64748b'} />
+                                    </View>
+                                    <View style={styles.choiceTextGroup}>
+                                        <Text style={styles.choiceTitle}>Carte bancaire</Text>
+                                        <Text style={styles.choiceSubtitle}>Paiement sécurisé par carte</Text>
+                                    </View>
+                                    {paymentType === 'card' && <Feather name="check-circle" size={17} color="#6d28d9" />}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: paymentType === 'mobile' }}
+                                    style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'mobile' && styles.paymentChoiceActive]}
+                                    onPress={() => {
+                                        setPaymentType('mobile');
+                                        setCardNumber('');
+                                        setCardExpiry('');
+                                        setCardCvv('');
+                                    }}
+                                >
+                                    <View style={[styles.paymentIcon, paymentType === 'mobile' && styles.paymentIconActive]}>
+                                        <Feather name="smartphone" size={20} color={paymentType === 'mobile' ? '#6d28d9' : '#64748b'} />
+                                    </View>
+                                    <View style={styles.choiceTextGroup}>
+                                        <Text style={styles.choiceTitle}>Mobile Money</Text>
+                                        <Text style={styles.choiceSubtitle}>Opérateurs disponibles selon votre pays</Text>
+                                    </View>
+                                    {paymentType === 'mobile' && <Feather name="check-circle" size={17} color="#6d28d9" />}
+                                </TouchableOpacity>
                             </View>
-                            <Text style={styles.cardInfo}>Les données de carte sont transmises à PayDunya pour le traitement et ne sont pas enregistrées dans la base de l’application.</Text>
-                        </>
-                    )}
 
-                    <TouchableOpacity
-                        style={[styles.primaryButton, (busy || autoCheckPayment) && styles.disabledButton]}
-                        onPress={handlePay}
-                        disabled={busy || autoCheckPayment}
-                    >
-                        {busy || autoCheckPayment ? <ActivityIndicator color="#ffffff" /> : <Feather name="lock" size={17} color="#ffffff" />}
-                        <Text style={styles.primaryButtonText}>
-                            {busy
-                                ? 'TRAITEMENT…'
-                                : autoCheckPayment
-                                    ? 'PAIEMENT EN COURS…'
-                                : order
-                                    ? 'RÉESSAYER LE PAIEMENT'
-                                    : paymentType === 'card'
-                                        ? 'PAYER PAR CARTE'
-                                        : 'PAYER PAR MOBILE MONEY'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {autoCheckPayment && (
-                        <View style={styles.checkButton}>
-                            {checkingPayment
-                                ? <ActivityIndicator size="small" color="#6d28d9" />
-                                : <Feather name="refresh-cw" size={17} color="#6d28d9" />}
-                            <Text style={styles.checkButtonText}>Vérification automatique du paiement…</Text>
+                            {paymentType === 'mobile' && (
+                                <>
+                                    <Text style={styles.helper}>Choisissez votre pays et votre opérateur. Vous saisirez ensuite le numéro associé.</Text>
+                                    {detectedCountry ? (
+                                        <View style={styles.detectedNotice}>
+                                            <Feather name="map-pin" size={15} color="#6d28d9" />
+                                            <Text style={styles.detectedNoticeText}>
+                                                Pays détecté : <Text style={styles.detectedCountryName}>{detectedCountry.name}</Text>
+                                            </Text>
+                                            <Text style={styles.detectedNoticeHint}>modifiable</Text>
+                                        </View>
+                                    ) : null}
+                                    <Text style={styles.sectionLabel}>Votre pays</Text>
+                                    <View style={styles.countryGrid}>
+                                        {PAYDUNYA_COUNTRIES.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.id}
+                                                accessibilityRole="button"
+                                                accessibilityState={{ selected: countryId === item.id }}
+                                                style={[styles.countryButton, countryId === item.id && styles.optionActive]}
+                                                onPress={() => {
+                                                    setCountryId(item.id);
+                                                    setOperatorKey(item.operators[0].key);
+                                                }}
+                                            >
+                                                <Text style={styles.countryFlag}>{item.flag}</Text>
+                                                <View style={styles.countryCopy}>
+                                                    <Text style={[styles.countryName, countryId === item.id && styles.optionTextActive]} numberOfLines={1}>
+                                                        {item.name}
+                                                    </Text>
+                                                </View>
+                                                {item.id === detectedCountry?.id ? (
+                                                    <Feather name="crosshair" size={13} color={countryId === item.id ? '#6d28d9' : '#94a3b8'} />
+                                                ) : null}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                    <Text style={styles.sectionLabel}>Opérateur</Text>
+                                    <View style={styles.operatorList}>
+                                        {country.operators.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.key}
+                                                accessibilityRole="button"
+                                                accessibilityState={{ selected: operatorKey === item.key }}
+                                                style={[styles.operatorButton, operatorKey === item.key && styles.optionActive]}
+                                                onPress={() => setOperatorKey(item.key)}
+                                            >
+                                                <View style={[styles.operatorMark, { backgroundColor: item.color }]}>
+                                                    <Text style={[styles.operatorMarkText, { color: item.textColor || '#ffffff' }]}>{item.short}</Text>
+                                                </View>
+                                                <View style={styles.operatorCopy}>
+                                                    <Text style={[styles.operatorName, operatorKey === item.key && styles.optionTextActive]} numberOfLines={1}>{item.name}</Text>
+                                                    <Text style={styles.operatorCaption}>Mobile Money</Text>
+                                                </View>
+                                                {operatorKey === item.key ? <Feather name="check-circle" size={16} color="#6d28d9" /> : null}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </>
+                            )}
                         </View>
-                    )}
-                    {error ? <Text style={styles.error}>{error}</Text> : null}
-                    {message ? <Text style={styles.message}>{message}</Text> : null}
-                </View>
+                        <View style={styles.stepActions}>
+                            <TouchableOpacity style={styles.secondaryButton} onPress={() => setCheckoutStep(order ? 3 : 1)}>
+                                <Feather name="arrow-left" size={16} color="#475569" />
+                                <Text style={styles.secondaryButtonText}>{order ? 'Retour au paiement' : 'Retour'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.primaryButton, styles.stepContinueButton]} onPress={() => setCheckoutStep(3)}>
+                                <Text style={styles.primaryButtonText}>CONTINUER</Text>
+                                <Feather name="arrow-right" size={17} color="#ffffff" />
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                )}
+
+                {checkoutStep === 3 && (
+                    <>
+                        <View style={styles.card}>
+                            <Text style={styles.cardTitle}>3. Confirmez votre paiement</Text>
+                            <View style={styles.paymentSummary}>
+                                <Feather name={paymentType === 'card' ? 'credit-card' : 'smartphone'} size={18} color="#6d28d9" />
+                                <Text style={styles.paymentSummaryText}>
+                                    {paymentType === 'card' ? 'Carte bancaire' : `${operator.name} · ${country.name}`}
+                                </Text>
+                                <Text style={styles.paymentSummaryAmount}>{formatPrice(cartTotal || cartSubtotal)}</Text>
+                            </View>
+
+                            {paymentType === 'mobile' ? (
+                                <>
+                                    <Text style={styles.helper}>Entrez le numéro Mobile Money puis confirmez la demande sur votre téléphone.</Text>
+                                    <Text style={styles.label}>Numéro {operator.name}</Text>
+                                    <View style={styles.phoneRow}>
+                                        <Text style={styles.prefix}>{country.dialCode}</Text>
+                                        <TextInput
+                                            style={styles.phoneInput}
+                                            value={phone}
+                                            onChangeText={setPhone}
+                                            keyboardType="phone-pad"
+                                            placeholder={phoneRules.example}
+                                        />
+                                    </View>
+                                    {requiresPayDunyaOtp(operator.key) && (
+                                        <>
+                                            <Text style={styles.label}>Code de paiement</Text>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={otp}
+                                                onChangeText={setOtp}
+                                                secureTextEntry
+                                                placeholder="Code demandé par l’opérateur"
+                                            />
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.helper}>Saisissez les informations de votre carte. Votre banque peut demander une authentification 3-D Secure.</Text>
+                                    <Text style={styles.label}>Nom sur la carte</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={cardholderName}
+                                        onChangeText={setCardholderName}
+                                        autoCapitalize="words"
+                                        placeholder={user?.name || 'Nom complet'}
+                                        editable={!busy}
+                                    />
+                                    <Text style={styles.label}>Numéro de carte</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={cardNumber}
+                                        onChangeText={setCardNumber}
+                                        keyboardType="number-pad"
+                                        placeholder="1234 5678 9012 3456"
+                                        maxLength={23}
+                                        editable={!busy}
+                                    />
+                                    <View style={styles.cardInputRow}>
+                                        <View style={styles.cardInputGroup}>
+                                            <Text style={styles.label}>Expiration (MM/AA)</Text>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={cardExpiry}
+                                                onChangeText={(value) => {
+                                                    const digits = value.replace(/\D/g, '').slice(0, 4);
+                                                    setCardExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
+                                                }}
+                                                keyboardType="number-pad"
+                                                placeholder="MM/AA"
+                                                maxLength={5}
+                                                editable={!busy}
+                                            />
+                                        </View>
+                                        <View style={styles.cardInputGroup}>
+                                            <Text style={styles.label}>Cryptogramme</Text>
+                                            <TextInput
+                                                style={styles.input}
+                                                value={cardCvv}
+                                                onChangeText={(value) => setCardCvv(value.replace(/\D/g, '').slice(0, 4))}
+                                                keyboardType="number-pad"
+                                                secureTextEntry
+                                                placeholder="CVV"
+                                                maxLength={4}
+                                                editable={!busy}
+                                            />
+                                        </View>
+                                    </View>
+                                    <Text style={styles.cardInfo}>Les données de carte sont transmises à PayDunya pour le traitement et ne sont pas enregistrées dans la base de l’application.</Text>
+                                </>
+                            )}
+
+                            <TouchableOpacity
+                                style={[styles.primaryButton, (busy || autoCheckPayment) && styles.disabledButton]}
+                                onPress={handlePay}
+                                disabled={busy || autoCheckPayment}
+                            >
+                                {busy || autoCheckPayment ? <ActivityIndicator color="#ffffff" /> : <Feather name="lock" size={17} color="#ffffff" />}
+                                <Text style={styles.primaryButtonText}>
+                                    {busy
+                                        ? 'TRAITEMENT…'
+                                        : autoCheckPayment
+                                            ? 'PAIEMENT EN COURS…'
+                                            : order
+                                                ? 'RÉESSAYER LE PAIEMENT'
+                                                : paymentType === 'card'
+                                                    ? 'PAYER PAR CARTE'
+                                                    : 'PAYER PAR MOBILE MONEY'}
+                                </Text>
+                            </TouchableOpacity>
+                            {autoCheckPayment && (
+                                <View style={styles.checkButton}>
+                                    {checkingPayment
+                                        ? <ActivityIndicator size="small" color="#6d28d9" />
+                                        : <Feather name="refresh-cw" size={17} color="#6d28d9" />}
+                                    <Text style={styles.checkButtonText}>Vérification automatique du paiement…</Text>
+                                </View>
+                            )}
+                            {error ? <Text style={styles.error}>{error}</Text> : null}
+                            {message ? <Text style={styles.message}>{message}</Text> : null}
+                        </View>
+                        <TouchableOpacity style={styles.backToPayment} onPress={() => setCheckoutStep(2)}>
+                            <Feather name="arrow-left" size={16} color="#475569" />
+                            <Text style={styles.secondaryButtonText}>Modifier le moyen de paiement</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
                 <Text style={styles.secureNote}>Les livres numériques sont délivrés uniquement après confirmation du paiement par PayDunya.</Text>
             </ScrollView>
         </View>
@@ -516,6 +581,14 @@ const styles = StyleSheet.create({
     iconCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#6d28d9', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
     title: { color: '#0f172a', fontSize: 26, fontWeight: '900' },
     subtitle: { color: '#64748b', fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8, maxWidth: 520 },
+    stepper: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, marginBottom: 4, paddingHorizontal: 8 },
+    stepItem: { alignItems: 'center', gap: 7, minWidth: 76 },
+    stepNumber: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0' },
+    stepNumberActive: { backgroundColor: '#6d28d9' },
+    stepNumberText: { color: '#64748b', fontSize: 12, fontWeight: '900' },
+    stepNumberTextActive: { color: '#ffffff' },
+    stepLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '700' },
+    stepLabelActive: { color: '#5b21b6' },
     card: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, borderRadius: 20, padding: 20, marginTop: 16 },
     cardTitle: { color: '#0f172a', fontSize: 18, fontWeight: '900', marginBottom: 12 },
     helper: { color: '#64748b', fontSize: 13, lineHeight: 19, marginBottom: 14 },
@@ -564,6 +637,14 @@ const styles = StyleSheet.create({
     cardInputRow: { flexDirection: 'row', gap: 12 },
     cardInputGroup: { flex: 1 },
     primaryButton: { minHeight: 50, backgroundColor: '#6d28d9', borderRadius: 14, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+    stepActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+    secondaryButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#ffffff' },
+    secondaryButtonText: { color: '#475569', fontSize: 13, fontWeight: '800' },
+    stepContinueButton: { flex: 1, marginTop: 0 },
+    paymentSummary: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, marginBottom: 14, borderRadius: 12, backgroundColor: '#f5f3ff' },
+    paymentSummaryText: { flex: 1, color: '#4c1d95', fontSize: 13, fontWeight: '800' },
+    paymentSummaryAmount: { color: '#5b21b6', fontSize: 13, fontWeight: '900' },
+    backToPayment: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 12 },
     disabledButton: { opacity: 0.65 },
     primaryButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
     checkButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15 },

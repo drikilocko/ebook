@@ -129,7 +129,10 @@ export const ProductDetailScreen: React.FC = () => {
         <View style={styles.container}>
             <Header />
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[styles.scrollContent, !isLargeScreen && styles.mobileScrollContent]}
+            >
                 <TouchableOpacity style={styles.breadcrumb} onPress={() => navigateTo('shop')}>
                     <Feather name="arrow-left" size={16} color="#475569" />
                     <Text style={styles.breadcrumbText}>
@@ -247,18 +250,20 @@ export const ProductDetailScreen: React.FC = () => {
                             </View>
                         )}
 
-                        <TouchableOpacity
-                            style={styles.buyNowBtn}
-                            onPress={isEbook && selectedProduct.price === 0
-                                ? () => openBook(selectedProduct)
-                                : handleBuyNow}
-                        >
-                            <Text style={styles.buyNowBtnText}>
-                                {isEbook && selectedProduct.price === 0
-                                    ? 'LIRE GRATUITEMENT'
-                                    : isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}
-                            </Text>
-                        </TouchableOpacity>
+                        {isLargeScreen && (
+                            <TouchableOpacity
+                                style={styles.buyNowBtn}
+                                onPress={isEbook && selectedProduct.price === 0
+                                    ? () => openBook(selectedProduct)
+                                    : handleBuyNow}
+                            >
+                                <Text style={styles.buyNowBtnText}>
+                                    {isEbook && selectedProduct.price === 0
+                                        ? 'LIRE GRATUITEMENT'
+                                        : isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
 
                         {isEbook && (
                             <View style={styles.previewLinkContainer}>
@@ -404,6 +409,29 @@ export const ProductDetailScreen: React.FC = () => {
                 )}
             </ScrollView>
 
+            {!isLargeScreen && (
+                <View style={styles.mobilePurchaseBar}>
+                    <View style={styles.mobilePurchasePrice}>
+                        <Text style={styles.mobilePurchaseLabel}>
+                            {language === 'fr' ? 'Prix' : 'Price'}
+                        </Text>
+                        <Text style={styles.mobilePurchaseAmount}>{formatPrice(selectedProduct.price)}</Text>
+                    </View>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        style={styles.mobilePurchaseButton}
+                        onPress={isEbook && selectedProduct.price === 0
+                            ? () => openBook(selectedProduct)
+                            : handleBuyNow}
+                    >
+                        <Text style={styles.buyNowBtnText}>
+                            {isEbook && selectedProduct.price === 0
+                                ? 'LIRE GRATUITEMENT'
+                                : isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 };
@@ -416,6 +444,9 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingHorizontal: 24,
         paddingVertical: 16,
+    },
+    mobileScrollContent: {
+        paddingBottom: 112,
     },
     errorContainer: {
         flex: 1,
@@ -644,6 +675,50 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 14,
         marginBottom: 24,
+    },
+    mobilePurchaseBar: {
+        position: 'absolute',
+        left: 12,
+        right: 12,
+        bottom: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 12,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        backgroundColor: 'rgba(255,255,255,0.97)',
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.14,
+        shadowRadius: 14,
+        elevation: 8,
+    },
+    mobilePurchasePrice: {
+        flex: 1,
+        minWidth: 0,
+    },
+    mobilePurchaseLabel: {
+        color: '#64748b',
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    mobilePurchaseAmount: {
+        color: '#0f172a',
+        fontSize: 16,
+        fontWeight: '900',
+        marginTop: 2,
+    },
+    mobilePurchaseButton: {
+        minHeight: 48,
+        maxWidth: '64%',
+        backgroundColor: '#111111',
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
     buyNowBtnText: {
         color: '#ffffff',
