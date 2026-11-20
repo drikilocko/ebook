@@ -361,10 +361,12 @@ export const CheckoutScreen: React.FC = () => {
                                     {paymentType === 'mobile' && <Feather name="check-circle" size={17} color="#6d28d9" />}
                                 </TouchableOpacity>
                             </View>
+                        </View>
 
-                            {paymentType === 'mobile' && (
-                                <>
-                                    <Text style={styles.helper}>Choisissez votre pays et votre opérateur. Vous saisirez ensuite le numéro associé.</Text>
+                        {paymentType === 'mobile' && (
+                            <View style={styles.card}>
+                                    <Text style={styles.cardTitle}>Mobile Money · étape 1/2 : pays et opérateur</Text>
+                                    <Text style={styles.helper}>Sélectionnez le pays et l’opérateur. Le numéro sera saisi à l’étape suivante.</Text>
                                     {detectedCountry ? (
                                         <View style={styles.detectedNotice}>
                                             <Feather name="map-pin" size={15} color="#6d28d9" />
@@ -420,9 +422,8 @@ export const CheckoutScreen: React.FC = () => {
                                             </TouchableOpacity>
                                         ))}
                                     </View>
-                                </>
-                            )}
-                        </View>
+                            </View>
+                        )}
                         <View style={styles.stepActions}>
                             <TouchableOpacity style={styles.secondaryButton} onPress={() => setCheckoutStep(order ? 3 : 1)}>
                                 <Feather name="arrow-left" size={16} color="#475569" />
@@ -439,7 +440,11 @@ export const CheckoutScreen: React.FC = () => {
                 {checkoutStep === 3 && (
                     <>
                         <View style={styles.card}>
-                            <Text style={styles.cardTitle}>3. Confirmez votre paiement</Text>
+                            <Text style={styles.cardTitle}>
+                                {paymentType === 'mobile'
+                                    ? 'Mobile Money · étape 2/2 : numéro et paiement'
+                                    : '3. Confirmez votre paiement'}
+                            </Text>
                             <View style={styles.paymentSummary}>
                                 <Feather name={paymentType === 'card' ? 'credit-card' : 'smartphone'} size={18} color="#6d28d9" />
                                 <Text style={styles.paymentSummaryText}>
