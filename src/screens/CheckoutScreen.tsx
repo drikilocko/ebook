@@ -7,6 +7,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     View,
+    useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LocalizedText as Text, LocalizedTextInput as TextInput } from '../context/LanguageContext';
@@ -16,6 +17,7 @@ import {
     formatPayDunyaPhone,
     initiatePayDunyaCardPayment,
     initiatePayDunyaPayment,
+    detectPayDunyaCountry,
     PAYDUNYA_COUNTRIES,
     requiresPayDunyaOtp,
     usdToXOF,
@@ -36,8 +38,15 @@ export const CheckoutScreen: React.FC = () => {
         formatPrice,
         navigateTo,
     } = useShop();
-    const [countryId, setCountryId] = useState('TG');
-    const [operatorKey, setOperatorKey] = useState('tmoney-tg');
+    const isNarrowScreen = useWindowDimensions().width < 520;
+    const [detectedCountry] = useState(() => detectPayDunyaCountry(
+        typeof navigator !== 'undefined' ? navigator.language : undefined,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ));
+    const [countryId, setCountryId] = useState(detectedCountry?.id ?? PAYDUNYA_COUNTRIES[0].id);
+    const [operatorKey, setOperatorKey] = useState(
+        detectedCountry?.operators[0].key ?? PAYDUNYA_COUNTRIES[0].operators[0].key,
+    );
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [cardholderName, setCardholderName] = useState('');
@@ -283,20 +292,22 @@ export const CheckoutScreen: React.FC = () => {
 
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>Choisissez votre mode de paiement</Text>
-                    <View style={styles.paymentChoices}>
+                    <View style={[styles.paymentChoices, isNarrowScreen && styles.paymentChoicesStacked]}>
                         <TouchableOpacity
-                            style={[styles.paymentChoice, paymentType === 'card' && styles.paymentChoiceActive]}
+                            style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'card' && styles.paymentChoiceActive]}
                             onPress={() => setPaymentType('card')}
                         >
-                            <Feather name="credit-card" size={20} color={paymentType === 'card' ? '#6d28d9' : '#64748b'} />
+                            <View style={[styles.paymentIcon, paymentType === 'card' && styles.paymentIconActive]}>
+                                <Feather name="credit-card" size={20} color={paymentType === 'card' ? '#6d28d9' : '#64748b'} />
+                            </View>
                             <View style={styles.choiceTextGroup}>
                                 <Text style={styles.choiceTitle}>Carte bancaire</Text>
-                                <Text style={styles.choiceSubtitle}>Paiement sécurisé sur PayDunya</Text>
+                                <Text style={styles.choiceSubtitle}>Paiement sécurisé par carte</Text>
                             </View>
                             {paymentType === 'card' && <Feather name="check-circle" size={17} color="#6d28d9" />}
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.paymentChoice, paymentType === 'mobile' && styles.paymentChoiceActive]}
+                            style={[styles.paymentChoice, isNarrowScreen && styles.paymentChoiceStacked, paymentType === 'mobile' && styles.paymentChoiceActive]}
                             onPress={() => {
                                 setPaymentType('mobile');
                                 setCardNumber('');
@@ -304,10 +315,12 @@ export const CheckoutScreen: React.FC = () => {
                                 setCardCvv('');
                             }}
                         >
-                            <Feather name="smartphone" size={20} color={paymentType === 'mobile' ? '#6d28d9' : '#64748b'} />
+                            <View style={[styles.paymentIcon, paymentType === 'mobile' && styles.paymentIconActive]}>
+                                <Feather name="smartphone" size={20} color={paymentType === 'mobile' ? '#6d28d9' : '#64748b'} />
+                            </View>
                             <View style={styles.choiceTextGroup}>
                                 <Text style={styles.choiceTitle}>Mobile Money</Text>
-                                <Text style={styles.choiceSubtitle}>T-Money, Flooz et opérateurs disponibles</Text>
+                                <Text style={styles.choiceSubtitle}>Opérateurs disponibles selon votre pays</Text>
                             </View>
                             {paymentType === 'mobile' && <Feather name="check-circle" size={17} color="#6d28d9" />}
                         </TouchableOpacity>
@@ -316,33 +329,63 @@ export const CheckoutScreen: React.FC = () => {
                     {paymentType === 'mobile' ? (
                     <>
                     <Text style={styles.helper}>Choisissez votre pays et votre opérateur, puis confirmez la demande sur votre téléphone.</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.options}>
+                    {detectedCountry ? (
+                        <View style={styles.detectedNotice}>
+                            <Feather name="map-pin" size={15} color="#6d28d9" />
+                            <Text style={styles.detectedNoticeText}>
+                                Pays détecté : <Text style={styles.detectedCountryName}>{detectedCountry.name}</Text>
+                            </Text>
+                            <Text style={styles.detectedNoticeHint}>modifiable</Text>
+                        </View>
+                    ) : null}
+                    <Text style={styles.sectionLabel}>Votre pays</Text>
+                    <View style={styles.countryGrid}>
                         {PAYDUNYA_COUNTRIES.map((item) => (
                             <TouchableOpacity
                                 key={item.id}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: countryId === item.id }}
                                 style={[styles.countryButton, countryId === item.id && styles.optionActive]}
                                 onPress={() => {
                                     setCountryId(item.id);
                                     setOperatorKey(item.operators[0].key);
                                 }}
                             >
-                                <Text style={[styles.optionText, countryId === item.id && styles.optionTextActive]}>
-                                    {item.flag} {item.name}
-                                </Text>
+                                <Text style={styles.countryFlag}>{item.flag}</Text>
+                                <View style={styles.countryCopy}>
+                                    <Text style={[styles.countryName, countryId === item.id && styles.optionTextActive]} numberOfLines={1}>
+                                        {item.name}
+                                    </Text>
+                                </View>
+                                {item.id === detectedCountry?.id ? (
+                                    <Feather name="crosshair" size={13} color={countryId === item.id ? '#6d28d9' : '#94a3b8'} />
+                                ) : null}
                             </TouchableOpacity>
                         ))}
-                    </ScrollView>
+                    </View>
 
+                    <Text style={styles.sectionLabel}>Opérateur</Text>
                     <View style={styles.operatorList}>
                         {country.operators.map((item) => (
                             <TouchableOpacity
                                 key={item.key}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: operatorKey === item.key }}
                                 style={[styles.operatorButton, operatorKey === item.key && styles.optionActive]}
                                 onPress={() => setOperatorKey(item.key)}
                             >
-                                <Text style={[styles.optionText, operatorKey === item.key && styles.optionTextActive]}>
-                                    {item.name}
-                                </Text>
+                                <View style={[styles.operatorMark, { backgroundColor: item.color }]}>
+                                    <Text style={[styles.operatorMarkText, { color: item.textColor || '#ffffff' }]}>
+                                        {item.short}
+                                    </Text>
+                                </View>
+                                <View style={styles.operatorCopy}>
+                                    <Text style={[styles.operatorName, operatorKey === item.key && styles.optionTextActive]} numberOfLines={1}>
+                                        {item.name}
+                                    </Text>
+                                    <Text style={styles.operatorCaption}>Mobile Money</Text>
+                                </View>
+                                {operatorKey === item.key ? <Feather name="check-circle" size={16} color="#6d28d9" /> : null}
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -476,12 +519,16 @@ const styles = StyleSheet.create({
     card: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, borderRadius: 20, padding: 20, marginTop: 16 },
     cardTitle: { color: '#0f172a', fontSize: 18, fontWeight: '900', marginBottom: 12 },
     helper: { color: '#64748b', fontSize: 13, lineHeight: 19, marginBottom: 14 },
-    paymentChoices: { gap: 9, marginBottom: 16 },
-    paymentChoice: { flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 13, padding: 13, backgroundColor: '#ffffff' },
-    paymentChoiceActive: { borderColor: '#8b5cf6', backgroundColor: '#faf5ff' },
+    paymentChoices: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+    paymentChoice: { flex: 1, minWidth: 0, minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 16, padding: 12, backgroundColor: '#ffffff' },
+    paymentChoicesStacked: { flexDirection: 'column' },
+    paymentChoiceStacked: { minHeight: 70 },
+    paymentChoiceActive: { borderColor: '#8b5cf6', backgroundColor: '#faf5ff', shadowColor: '#6d28d9', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2 },
+    paymentIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9' },
+    paymentIconActive: { backgroundColor: '#ede9fe' },
     choiceTextGroup: { flex: 1 },
     choiceTitle: { color: '#0f172a', fontSize: 13, fontWeight: '900' },
-    choiceSubtitle: { color: '#64748b', fontSize: 11, marginTop: 3 },
+    choiceSubtitle: { color: '#64748b', fontSize: 10, lineHeight: 15, marginTop: 4 },
     cardInfo: { color: '#475569', backgroundColor: '#f8fafc', borderRadius: 11, padding: 12, fontSize: 12, lineHeight: 18, marginBottom: 13 },
     line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginVertical: 6 },
     lineName: { flex: 1, color: '#334155', fontSize: 13, fontWeight: '600' },
@@ -489,13 +536,26 @@ const styles = StyleSheet.create({
     separator: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 10 },
     totalLabel: { color: '#0f172a', fontWeight: '800', fontSize: 15 },
     total: { color: '#6d28d9', fontWeight: '900', fontSize: 20 },
-    options: { gap: 8, paddingBottom: 10 },
-    countryButton: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12 },
+    detectedNotice: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#f5f3ff', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 15 },
+    detectedNoticeText: { flex: 1, color: '#475569', fontSize: 11 },
+    detectedCountryName: { color: '#5b21b6', fontWeight: '900' },
+    detectedNoticeHint: { color: '#7c3aed', fontSize: 10, fontWeight: '700' },
+    sectionLabel: { color: '#334155', fontSize: 12, fontWeight: '900', marginBottom: 8 },
+    countryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
+    countryButton: { width: '48%', minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 13, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: '#ffffff' },
+    countryFlag: { fontSize: 21 },
+    countryCopy: { flex: 1, minWidth: 0 },
+    countryName: { color: '#334155', fontSize: 11, fontWeight: '800' },
     optionActive: { backgroundColor: '#f3e8ff', borderColor: '#8b5cf6' },
     optionText: { color: '#475569', fontSize: 12, fontWeight: '700' },
     optionTextActive: { color: '#6d28d9' },
     operatorList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
-    operatorButton: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 11, paddingVertical: 9, paddingHorizontal: 12 },
+    operatorButton: { width: '48%', minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 13, paddingVertical: 8, paddingHorizontal: 9, backgroundColor: '#ffffff' },
+    operatorMark: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+    operatorMarkText: { fontSize: 9, fontWeight: '900' },
+    operatorCopy: { flex: 1, minWidth: 0 },
+    operatorName: { color: '#334155', fontSize: 10, fontWeight: '900' },
+    operatorCaption: { color: '#94a3b8', fontSize: 9, marginTop: 3 },
     label: { color: '#334155', fontSize: 12, fontWeight: '800', marginBottom: 7, marginTop: 3 },
     phoneRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, marginBottom: 14, paddingHorizontal: 13, backgroundColor: '#ffffff' },
     prefix: { color: '#6d28d9', fontWeight: '800', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingRight: 12 },

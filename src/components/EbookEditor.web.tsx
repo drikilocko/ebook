@@ -1,21 +1,78 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LocalizedText as Text } from '../context/LanguageContext';
 import {
     EbookHeading,
     EbookTocGroup,
+    EBOOK_NAV_SPACER_CSS,
     EBOOK_READER_CSS,
     groupEbookHeadings,
 } from '../lib/ebookReader';
+import { EbookBottomNav, EbookSidePanel } from './EbookNavigation';
 import { buildEbookJsonNavigation, EbookJsonColorScheme, renderEbookJsonDocument } from '../lib/ebookJson';
 
 interface EbookEditorProps {
     sourceUrl: string;
     format: 'html' | 'pdf' | 'json';
+    title?: string;
 }
 
-export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) => {
+/** Tracks which heading is on screen and how far the reader has scrolled inside the iframe. */
+const installScrollSpy = (
+    frame: HTMLIFrameElement,
+    report: (activeId: string | null, progress: number) => void,
+    withSpacer: boolean,
+): (() => void) => {
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    if (!win || !doc) return () => undefined;
+
+    if (withSpacer && !doc.getElementById('ebook-nav-spacer')) {
+        const spacer = doc.createElement('style');
+        spacer.id = 'ebook-nav-spacer';
+        spacer.textContent = EBOOK_NAV_SPACER_CSS;
+        (doc.head || doc.documentElement).appendChild(spacer);
+    }
+
+    let frameRequest = 0;
+    let lastId: string | null | undefined;
+    let lastProgress = -1;
+
+    const measure = () => {
+        frameRequest = 0;
+        const marked = doc.querySelectorAll<HTMLElement>('[data-ebook-reader-id]');
+        const targets = marked.length ? marked : doc.querySelectorAll<HTMLElement>('.reader-page[id]');
+        const threshold = win.innerHeight * 0.3;
+        let activeId: string | null = null;
+        for (const element of Array.from(targets)) {
+            if (element.getBoundingClientRect().top > threshold) break;
+            activeId = element.getAttribute('data-ebook-reader-id') || element.id;
+        }
+        const root = doc.scrollingElement || doc.documentElement;
+        const max = Math.max(1, root.scrollHeight - win.innerHeight);
+        const progress = Math.round(Math.min(1, Math.max(0, root.scrollTop / max)) * 200) / 200;
+        if (activeId !== lastId || progress !== lastProgress) {
+            lastId = activeId;
+            lastProgress = progress;
+            report(activeId, progress);
+        }
+    };
+    const onScroll = () => {
+        if (!frameRequest) frameRequest = win.requestAnimationFrame(measure);
+    };
+
+    win.addEventListener('scroll', onScroll, { passive: true });
+    win.addEventListener('resize', onScroll);
+    measure();
+    return () => {
+        win.removeEventListener('scroll', onScroll);
+        win.removeEventListener('resize', onScroll);
+        if (frameRequest) win.cancelAnimationFrame(frameRequest);
+    };
+};
+
+export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format, title }) => {
     const [htmlDocument, setHtmlDocument] = useState<string | null>(null);
     const [jsonDocument, setJsonDocument] = useState<unknown>(null);
     const [groups, setGroups] = useState<EbookTocGroup[]>([]);
@@ -28,6 +85,8 @@ export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) =
     const [manualFullscreen, setManualFullscreen] = useState(false);
     const [fullscreenError, setFullscreenError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [readingProgress, setReadingProgress] = useState(0);
+    const spyCleanupRef = useRef<() => void>(() => undefined);
     const frameRef = useRef<HTMLIFrameElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const readerCss = useMemo(() => EBOOK_READER_CSS, []);
@@ -129,6 +188,19 @@ export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) =
         applyReaderColors();
     }, [applyReaderColors, documentHtml]);
 
+    useEffect(() => () => spyCleanupRef.current(), []);
+
+    const handleFrameLoad = () => {
+        applyReaderColors();
+        spyCleanupRef.current();
+        const frame = frameRef.current;
+        if (!frame) return;
+        spyCleanupRef.current = installScrollSpy(frame, (activeId, progress) => {
+            setActiveHeadingId(activeId);
+            setReadingProgress(progress);
+        }, true);
+    };
+
     const jumpToHeading = (id: string) => {
         setActiveHeadingId(id);
         const document = frameRef.current?.contentDocument;
@@ -219,41 +291,15 @@ export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) =
     return (
         <div ref={containerRef} style={rootStyle}>
             {toolbar}
-            <View style={[styles.layout, compactLayout && styles.compactLayout]}>
-                {navigationGroups.length > 0 ? (
-                    <View style={[styles.toc, compactLayout && styles.compactToc]}>
-                        <View style={styles.tocHeader}>
-                            <Feather name="list" size={16} color="#6d28d9" />
-                            <Text style={styles.tocTitle}>{format === 'json' ? 'Sommaire' : 'Tomes et chapitres'}</Text>
-                        </View>
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            {navigationGroups.map((group) => (
-                                <View key={group.id} style={styles.tocGroup}>
-                                    <TouchableOpacity
-                                        style={[styles.tomeButton, activeHeadingId === group.id && styles.activeItem]}
-                                        onPress={() => jumpToHeading(group.id)}
-                                    >
-                                        <Text style={styles.tomeText} numberOfLines={2}>{group.title}</Text>
-                                        {group.page ? <Text style={styles.pageReference}>p. {group.page}</Text> : null}
-                                    </TouchableOpacity>
-                                    {group.chapters.map((chapter) => (
-                                        <TouchableOpacity
-                                            key={chapter.id}
-                                            style={[
-                                                styles.chapterButton,
-                                                chapter.level === 3 && styles.subChapterButton,
-                                                activeHeadingId === chapter.id && styles.activeItem,
-                                            ]}
-                                            onPress={() => jumpToHeading(chapter.id)}
-                                        >
-                                            <Text style={styles.chapterText} numberOfLines={3}>{chapter.title}</Text>
-                                            {chapter.page ? <Text style={styles.pageReference}>p. {chapter.page}</Text> : null}
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </View>
+            <View style={styles.layout}>
+                {navigationGroups.length > 0 && !compactLayout ? (
+                    <EbookSidePanel
+                        groups={navigationGroups}
+                        activeId={activeHeadingId}
+                        progress={readingProgress}
+                        onJump={jumpToHeading}
+                        title={title}
+                    />
                 ) : null}
                 <View style={styles.reader}>
                     {error ? (
@@ -263,7 +309,7 @@ export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) =
                             ref={frameRef}
                             title="Lecteur de livre"
                             srcDoc={documentHtml}
-                            onLoad={applyReaderColors}
+                            onLoad={handleFrameLoad}
                             sandbox="allow-same-origin"
                             style={{ width: '100%', height: '100%', minHeight: 400, border: 0, backgroundColor }}
                         />
@@ -273,6 +319,15 @@ export const EbookEditor: React.FC<EbookEditorProps> = ({ sourceUrl, format }) =
                             <Text style={styles.loadingText}>{isLoading ? 'Ouverture de votre livre…' : 'Aucun contenu à afficher.'}</Text>
                         </View>
                     )}
+                    {navigationGroups.length > 0 && compactLayout && documentHtml ? (
+                        <EbookBottomNav
+                            groups={navigationGroups}
+                            activeId={activeHeadingId}
+                            progress={readingProgress}
+                            onJump={jumpToHeading}
+                            title={title}
+                        />
+                    ) : null}
                 </View>
             </View>
         </div>
@@ -288,20 +343,7 @@ const styles = StyleSheet.create({
     fullscreenText: { color: '#334155', fontSize: 12, fontWeight: '700' },
     fullscreenError: { color: '#b91c1c', fontSize: 11 },
     layout: { flex: 1, flexDirection: 'row', minHeight: 0, backgroundColor: '#f1f5f9' },
-    compactLayout: { flexDirection: 'column' },
-    toc: { width: 270, flexShrink: 0, backgroundColor: '#ffffff', borderRightWidth: 1, borderRightColor: '#e2e8f0' },
-    compactToc: { width: '100%', maxHeight: 210, borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-    tocHeader: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-    tocTitle: { color: '#172033', fontSize: 13, fontWeight: '800' },
-    tocGroup: { paddingHorizontal: 10, paddingTop: 10 },
-    tomeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, paddingHorizontal: 9, paddingVertical: 10, borderRadius: 9 },
-    tomeText: { color: '#172033', fontSize: 12, fontWeight: '800', lineHeight: 18 },
-    chapterButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginLeft: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 },
-    subChapterButton: { marginLeft: 18 },
-    chapterText: { color: '#64748b', fontSize: 12, lineHeight: 17 },
-    pageReference: { color: '#7c3aed', fontSize: 10, fontWeight: '800' },
-    activeItem: { backgroundColor: '#f3e8ff' },
-    reader: { flex: 1, minWidth: 0, backgroundColor: '#f1f5f9' },
+    reader: { flex: 1, minWidth: 0, position: 'relative', backgroundColor: '#f1f5f9' },
     loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
     loadingText: { color: '#64748b', fontSize: 13 },
     error: { padding: 24, color: '#b91c1c', fontSize: 14, lineHeight: 22 },

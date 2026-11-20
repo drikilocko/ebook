@@ -132,3 +132,103 @@ export const createEbookReaderScript = (): string => {
         true;
     `;
 };
+
+export interface EbookNavItem {
+    id: string;
+    title: string;
+    level: number;
+    page?: number;
+    isGroup: boolean;
+}
+
+/** Flattens the table of contents into reading order (groups first, then their chapters). */
+export const flattenEbookNavigation = (groups: EbookTocGroup[]): EbookNavItem[] => {
+    const items: EbookNavItem[] = [];
+    const seen = new Set<string>();
+    groups.forEach((group) => {
+        const isSynthetic = group.id === 'ebook-contents' || group.id === 'ebook-chapters' || group.id === 'ebook-page-index';
+        if (!isSynthetic && !seen.has(group.id)) {
+            seen.add(group.id);
+            items.push({ id: group.id, title: group.title, level: 1, page: group.page, isGroup: true });
+        }
+        group.chapters.forEach((chapter) => {
+            if (seen.has(chapter.id)) return;
+            seen.add(chapter.id);
+            items.push({ id: chapter.id, title: chapter.title, level: chapter.level, page: chapter.page, isGroup: false });
+        });
+    });
+    return items;
+};
+
+/** Extra CSS that keeps the last lines readable above the floating mobile navigation bar. */
+export const EBOOK_NAV_SPACER_CSS = `
+    html { scroll-padding-top: 16px; }
+    body::after { content: ""; display: block; height: 112px; }
+`;
+
+/**
+ * Browser-side scroll spy shared by the web iframe and native WebViews.
+ * Calls `report(activeId, progress)` whenever the reading position changes.
+ */
+export const EBOOK_SCROLL_SPY_SOURCE = `
+    function installEbookScrollSpy(win, report, withSpacer) {
+        var doc = win.document;
+        if (!doc || doc.__ebookSpyInstalled) return;
+        doc.__ebookSpyInstalled = true;
+        if (withSpacer) {
+            var spacer = doc.createElement('style');
+            spacer.textContent = ${JSON.stringify(EBOOK_NAV_SPACER_CSS)};
+            (doc.head || doc.documentElement).appendChild(spacer);
+        }
+        var lastId = null;
+        var lastProgress = -1;
+        var ticking = false;
+        function targets() {
+            var marked = doc.querySelectorAll('[data-ebook-reader-id]');
+            return marked.length ? marked : doc.querySelectorAll('.reader-page[id]');
+        }
+        function measure() {
+            ticking = false;
+            var list = targets();
+            var threshold = win.innerHeight * 0.3;
+            var activeId = null;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].getBoundingClientRect().top <= threshold) {
+                    activeId = list[i].getAttribute('data-ebook-reader-id') || list[i].id;
+                } else {
+                    break;
+                }
+            }
+            var root = doc.scrollingElement || doc.documentElement;
+            var max = Math.max(1, root.scrollHeight - win.innerHeight);
+            var progress = Math.min(1, Math.max(0, (win.scrollY || root.scrollTop) / max));
+            progress = Math.round(progress * 200) / 200;
+            if (activeId !== lastId || progress !== lastProgress) {
+                lastId = activeId;
+                lastProgress = progress;
+                report(activeId, progress);
+            }
+        }
+        function onScroll() {
+            if (!ticking) {
+                ticking = true;
+                (win.requestAnimationFrame || setTimeout)(measure);
+            }
+        }
+        win.addEventListener('scroll', onScroll, { passive: true });
+        win.addEventListener('resize', onScroll);
+        measure();
+    }
+`;
+
+export const createEbookScrollSpyScript = (withSpacer: boolean): string => `
+    (function() {
+        ${EBOOK_SCROLL_SPY_SOURCE}
+        installEbookScrollSpy(window, function(activeId, progress) {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ebook-progress', activeId: activeId, progress: progress }));
+            }
+        }, ${withSpacer ? 'true' : 'false'});
+    })();
+    true;
+`;

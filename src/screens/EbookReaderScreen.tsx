@@ -5,6 +5,7 @@ import { LocalizedText as Text } from '../context/LanguageContext';
 import { Header } from '../components/Header';
 import { EbookEditor } from '../components/EbookEditor';
 import { useShop } from '../context/ShopContext';
+import { downloadEbookJsonAsPdf } from '../lib/ebookPdf';
 import { getErrorMessage } from '../lib/supabase';
 
 export const EbookReaderScreen: React.FC = () => {
@@ -12,6 +13,14 @@ export const EbookReaderScreen: React.FC = () => {
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [downloading, setDownloading] = useState(false);
+    const ebookFormat = selectedBook?.ebookFormat
+        ?? (selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.json')
+            ? 'json'
+            : selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.html')
+                || selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.htm')
+                ? 'html'
+                : 'pdf');
 
     useEffect(() => {
         let mounted = true;
@@ -42,13 +51,21 @@ export const EbookReaderScreen: React.FC = () => {
     }, [selectedBook, selectedBookOrderId, getEbookUrl]);
 
     const handleDownload = async () => {
-        if (!selectedBook || (!selectedBookOrderId && selectedBook.price !== 0)) return;
+        if (!selectedBook || !url || downloading || (!selectedBookOrderId && selectedBook.price !== 0)) return;
         setError(null);
+        setDownloading(true);
         try {
+            if (ebookFormat === 'json') {
+                await downloadEbookJsonAsPdf(url, selectedBook.name);
+                return;
+            }
+
             const downloadUrl = await getEbookUrl(selectedBookOrderId, selectedBook.id, true);
             await Linking.openURL(downloadUrl);
         } catch (downloadError) {
             setError(getErrorMessage(downloadError));
+        } finally {
+            setDownloading(false);
         }
     };
 
@@ -64,9 +81,16 @@ export const EbookReaderScreen: React.FC = () => {
                     <Text style={styles.backText}>{selectedBookOrderId ? 'Mes livres' : 'Boutique'}</Text>
                 </TouchableOpacity>
                 <Text style={styles.title} numberOfLines={1}>{selectedBook?.name || 'Lecture de l’ebook'}</Text>
-                <TouchableOpacity style={styles.downloadButton} onPress={() => void handleDownload()}>
+                <TouchableOpacity
+                    style={styles.downloadButton}
+                    onPress={() => void handleDownload()}
+                    disabled={downloading || loading || !url}
+                    accessibilityState={{ disabled: downloading || loading || !url }}
+                >
                     <Feather name="download" size={16} color="#ffffff" />
-                    <Text style={styles.downloadText}>TÉLÉCHARGER</Text>
+                    <Text style={styles.downloadText}>
+                        {downloading ? 'PRÉPARATION…' : ebookFormat === 'json' ? 'TÉLÉCHARGER PDF' : 'TÉLÉCHARGER'}
+                    </Text>
                 </TouchableOpacity>
             </View>
             {loading ? (
@@ -83,13 +107,8 @@ export const EbookReaderScreen: React.FC = () => {
             ) : url ? (
                 <EbookEditor
                     sourceUrl={url}
-                    format={selectedBook?.ebookFormat
-                        ?? (selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.json')
-                            ? 'json'
-                            : selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.html')
-                                || selectedBook?.ebookStoragePath?.toLowerCase().endsWith('.htm')
-                                ? 'html'
-                                : 'pdf')}
+                    title={selectedBook?.name}
+                    format={ebookFormat}
                 />
             ) : null}
         </View>

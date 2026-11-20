@@ -536,9 +536,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!purchasedProduct.ebookStoragePath) {
             throw new Error('Le fichier de ce livre n’est pas encore disponible. Contactez le support.');
         }
+        const storagePath = purchasedProduct.ebookStoragePath.replace(/^ebooks\//i, '');
+        if (!storagePath) {
+            throw new Error('Le chemin du fichier de ce livre est invalide.');
+        }
         const { data, error } = await supabase.storage
             .from('ebooks')
-            .createSignedUrl(purchasedProduct.ebookStoragePath, 300, download ? { download: true } : undefined);
+            .createSignedUrl(storagePath, 300, download ? { download: true } : undefined);
         if (error) {
             reportBackendError(error);
             throw error;

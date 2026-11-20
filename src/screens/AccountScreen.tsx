@@ -6,6 +6,7 @@ import { Header } from '../components/Header';
 import { useShop } from '../context/ShopContext';
 import { Order, Product } from '../types';
 import { getErrorMessage } from '../lib/supabase';
+import { downloadEbookJsonAsPdf } from '../lib/ebookPdf';
 
 type AccountTab = 'profile' | 'library' | 'orders' | 'settings';
 
@@ -16,6 +17,10 @@ type PurchasedBook = {
 
 const isEbookOrder = (order: Order) =>
     order.items.length > 0 && order.items.every((item) => Boolean(item.product.ebookStoragePath));
+
+const isJsonEbook = (product: Product) =>
+    product.ebookFormat === 'json'
+    || (!product.ebookFormat && Boolean(product.ebookStoragePath?.toLowerCase().endsWith('.json')));
 
 export const AccountScreen: React.FC = () => {
     const {
@@ -167,15 +172,24 @@ export const AccountScreen: React.FC = () => {
                                             onPress={async () => {
                                                 setDownloadError(null);
                                                 try {
-                                                    const url = await getEbookUrl(orderId, product.id, true);
-                                                    await Linking.openURL(url);
+                                                    const isJson = isJsonEbook(product);
+                                                    const url = await getEbookUrl(orderId, product.id, !isJson);
+                                                    if (isJson) {
+                                                        await downloadEbookJsonAsPdf(url, product.name);
+                                                    } else {
+                                                        await Linking.openURL(url);
+                                                    }
                                                 } catch (error) {
                                                     setDownloadError(getErrorMessage(error));
                                                 }
                                             }}
                                         >
                                             <Feather name="download" size={15} color="#6d28d9" />
-                                            <Text style={styles.downloadButtonText}>TÉLÉCHARGER</Text>
+                                            <Text style={styles.downloadButtonText}>
+                                                {isJsonEbook(product)
+                                                    ? 'TÉLÉCHARGER PDF'
+                                                    : 'TÉLÉCHARGER'}
+                                            </Text>
                                         </TouchableOpacity>
                                     </View>
                                     {downloadError ? <Text style={styles.downloadError}>{downloadError}</Text> : null}

@@ -311,6 +311,7 @@ export const renderEbookJsonDocument = (
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${title}</title>
         <style>
           :root {
             --reader-background: ${colors.background};
@@ -388,6 +389,26 @@ export const renderEbookJsonDocument = (
               border-radius: 0;
               box-shadow: none;
             }
+          }
+          @media print {
+            @page { size: A4; margin: 18mm 16mm; }
+            html, body { background: #ffffff; }
+            body { padding: 0; font-size: 11pt; }
+            .reader-page {
+              max-width: none;
+              min-height: 0;
+              margin: 0;
+              padding: 0;
+              border: 0;
+              border-radius: 0;
+              box-shadow: none;
+              break-after: page;
+              page-break-after: always;
+            }
+            .reader-page:last-child { break-after: auto; page-break-after: auto; }
+            .page-content { flex: initial; }
+            .page-number { break-inside: avoid; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         </style>
       </head>

@@ -90,6 +90,25 @@ export const PAYDUNYA_COUNTRIES: PayDunyaCountry[] = [
     },
 ];
 
+const COUNTRY_TIME_ZONES: Record<string, string> = {
+    'Africa/Lome': 'TG',
+    'Africa/Dakar': 'SN',
+    'Africa/Abidjan': 'CI',
+    'Africa/Ouagadougou': 'BF',
+    'Africa/Bamako': 'ML',
+    'Africa/Porto-Novo': 'BJ',
+    'Africa/Cotonou': 'BJ',
+    'Africa/Douala': 'CM',
+};
+
+export function detectPayDunyaCountry(locale?: string, timeZone?: string): PayDunyaCountry | undefined {
+    const timeZoneCountryId = timeZone ? COUNTRY_TIME_ZONES[timeZone] : undefined;
+    const localeCountryId = locale?.replace('_', '-').split('-')[1]?.toUpperCase();
+    const detectedCountryId = timeZoneCountryId
+        || PAYDUNYA_COUNTRIES.find((country) => country.id === localeCountryId)?.id;
+    return PAYDUNYA_COUNTRIES.find((country) => country.id === detectedCountryId);
+}
+
 export function getPayDunyaPhoneRules(country: PayDunyaCountry, operatorKey?: string) {
     const operator = country.operators.find((item) => item.key === operatorKey);
     return {
