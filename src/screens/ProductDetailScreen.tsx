@@ -5,6 +5,8 @@ import {
     TouchableOpacity,
     StyleSheet,
     ScrollView,
+    Platform,
+    Share,
     useWindowDimensions,
 } from 'react-native';
 import { LocalizedText as Text, useLanguage, translateText } from '../context/LanguageContext';
@@ -45,12 +47,16 @@ export const ProductDetailScreen: React.FC = () => {
     const [quantity, setQuantity] = useState(1);
     const [openAccordion, setOpenAccordion] = useState<'desc' | 'specifications' | 'shipping' | null>('desc');
     const [addedToast, setAddedToast] = useState(false);
+    const [previewLinkStatus, setPreviewLinkStatus] = useState<string | null>(null);
+    const [previewLinkError, setPreviewLinkError] = useState<string | null>(null);
 
     useEffect(() => {
         setActiveImageIndex(0);
         setSelectedColor(selectedProduct?.colors[0] || null);
         setQuantity(1);
         setAddedToast(false);
+        setPreviewLinkStatus(null);
+        setPreviewLinkError(null);
     }, [selectedProduct?.id]);
 
     if (!selectedProduct || !selectedColor) {
@@ -85,6 +91,30 @@ export const ProductDetailScreen: React.FC = () => {
     const handleBuyNow = () => {
         addToCart(selectedProduct, selectedColor, quantity);
         navigateTo('checkout');
+    };
+
+    const handleSharePreview = async () => {
+        const previewUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://www.secretdange.com'}/?preview=${encodeURIComponent(selectedProduct.id)}`;
+        setPreviewLinkError(null);
+        try {
+            if (Platform.OS === 'web' && !navigator.share) {
+                if (!navigator.clipboard?.writeText) {
+                    throw new Error('Le partage de liens n’est pas disponible dans ce navigateur.');
+                }
+                await navigator.clipboard.writeText(previewUrl);
+                setPreviewLinkStatus(language === 'fr' ? 'Lien copié' : 'Link copied');
+                return;
+            }
+
+            await Share.share({
+                message: `${translateText(selectedProduct.name, language)}\n${previewUrl}`,
+                title: translateText(selectedProduct.name, language),
+                url: previewUrl,
+            });
+            setPreviewLinkStatus(language === 'fr' ? 'Lien prêt à partager' : 'Link ready to share');
+        } catch (shareError) {
+            setPreviewLinkError(shareError instanceof Error ? shareError.message : String(shareError));
+        }
     };
 
     const relatedProducts = products
@@ -229,6 +259,22 @@ export const ProductDetailScreen: React.FC = () => {
                                     : isEbook ? 'ACHETER CET EBOOK' : 'BUY IT NOW'}
                             </Text>
                         </TouchableOpacity>
+
+                        {isEbook && (
+                            <View style={styles.previewLinkContainer}>
+                                <TouchableOpacity
+                                    style={[styles.previewLinkButton, { borderColor: colorWithOpacity(theme.accent, 0.35) }]}
+                                    onPress={() => void handleSharePreview()}
+                                >
+                                    <Feather name="share-2" size={16} color={theme.accent} />
+                                    <Text style={[styles.previewLinkButtonText, { color: theme.accent }]}>
+                                        {language === 'fr' ? 'Partager le lien d’aperçu' : 'Share preview link'}
+                                    </Text>
+                                </TouchableOpacity>
+                                {previewLinkStatus ? <Text style={styles.previewLinkStatus}>{previewLinkStatus}</Text> : null}
+                                {previewLinkError ? <Text style={styles.previewLinkError}>{previewLinkError}</Text> : null}
+                            </View>
+                        )}
 
                         <View style={styles.accordionsWrapper}>
                             <TouchableOpacity
@@ -604,6 +650,35 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '900',
         letterSpacing: 0.5,
+    },
+    previewLinkContainer: {
+        alignItems: 'flex-start',
+        gap: 8,
+        marginBottom: 24,
+    },
+    previewLinkButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        backgroundColor: '#ffffff',
+    },
+    previewLinkButtonText: {
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    previewLinkStatus: {
+        color: '#15803d',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    previewLinkError: {
+        color: '#b91c1c',
+        fontSize: 12,
+        fontWeight: '700',
     },
     accordionsWrapper: {
         borderTopWidth: 1,

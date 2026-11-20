@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Product, CartItem, FilterState, CurrencyCode, Currency, Order, User } from '../types';
-import { PRODUCTS, CATEGORIES, CURRENCIES } from '../data/mockData';
+import { CATEGORIES, CURRENCIES } from '../data/mockData';
 import { getErrorMessage, isExpiredJwtError, supabase } from '../lib/supabase';
 import { checkPayDunyaOrderStatus } from '../lib/paydunya';
 import { translateText, useLanguage } from './LanguageContext';
@@ -286,6 +286,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setProductList([]);
                     reportBackendError(error);
                 }
+            } finally {
+                if (mounted) setProductsLoaded(true);
             }
         };
 
@@ -336,7 +338,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveScreen(screen);
         if (typeof window !== 'undefined') {
             const nextPath = screen === 'admin' ? '/admin' : '/';
-            if (window.location.pathname !== nextPath) {
+            if (`${window.location.pathname}${window.location.search}` !== nextPath) {
                 window.history.pushState(null, '', nextPath);
             }
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -346,16 +348,36 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const syncScreenWithPath = () => {
-            setActiveScreen(window.location.pathname.replace(/\/+$/, '') === '/admin' ? 'admin' : 'shop');
+            if (window.location.pathname.replace(/\/+$/, '') === '/admin') {
+                setActiveScreen('admin');
+                return;
+            }
+            const previewId = new URLSearchParams(window.location.search).get('preview');
+            const previewProduct = previewId
+                ? productListRef.current.find((product) => product.id === previewId)
+                : undefined;
+            if (previewProduct) {
+                setSelectedProduct(previewProduct);
+                setActiveScreen('product-detail');
+            } else {
+                setActiveScreen('shop');
+            }
         };
+        syncScreenWithPath();
         window.addEventListener('popstate', syncScreenWithPath);
         return () => window.removeEventListener('popstate', syncScreenWithPath);
     }, []);
 
     const openProductDetail = (product: Product) => {
         setSelectedProduct(product);
-        navigateTo('product-detail');
-        if (!user) setShowAuthModal(true);
+        setActiveScreen('product-detail');
+        if (typeof window !== 'undefined') {
+            const previewPath = `/?preview=${encodeURIComponent(product.id)}`;
+            if (`${window.location.pathname}${window.location.search}` !== previewPath) {
+                window.history.pushState(null, '', previewPath);
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     };
 
     const addToCart = (
@@ -502,8 +524,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFilterState(initialFilterState);
     };
 
-    const [productList, setProductList] = useState<Product[]>(PRODUCTS.filter((product) => !product.isHidden));
+    const [productList, setProductList] = useState<Product[]>([]);
+    const [productsLoaded, setProductsLoaded] = useState(false);
+    const productListRef = useRef(productList);
+    productListRef.current = productList;
     const [orders, setOrders] = useState<Order[]>([]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const previewId = new URLSearchParams(window.location.search).get('preview');
+        if (!previewId) return;
+
+        const previewProduct = productList.find((product) => product.id === previewId);
+        if (previewProduct) {
+            setSelectedProduct(previewProduct);
+            setActiveScreen('product-detail');
+        } else if (productsLoaded) {
+            setSelectedProduct(null);
+            setActiveScreen('shop');
+        }
+    }, [productList, productsLoaded]);
 
     const openBook = (product: Product, orderId?: string) => {
         if (!user) {
