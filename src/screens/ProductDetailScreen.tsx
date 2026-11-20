@@ -9,10 +9,21 @@ import {
 } from 'react-native';
 import { LocalizedText as Text, useLanguage, translateText } from '../context/LanguageContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useShop } from '../context/ShopContext';
 import { Header } from '../components/Header';
 import { ProductCard } from '../components/ProductCard';
 import { ProductReviews } from '../components/ProductReviews';
+
+const colorWithOpacity = (color: string, opacity: number): string => {
+    const match = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(color);
+    if (!match) return `rgba(109, 40, 217, ${opacity})`;
+    const hex = match[1].length === 3
+        ? match[1].split('').map((character) => character + character).join('')
+        : match[1];
+    const channels = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+    return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${opacity})`;
+};
 
 export const ProductDetailScreen: React.FC = () => {
     const {
@@ -277,9 +288,24 @@ export const ProductDetailScreen: React.FC = () => {
                         </View>
 
                         {selectedProduct.preview && (
-                            <View style={[styles.previewCard, { backgroundColor: theme.background, borderColor: theme.glow }]}>
-                                <Text style={[styles.previewTitle, { color: theme.title }]}>Avant-goût du livre</Text>
-                                <Text style={[styles.previewText, { color: theme.text }]}>{selectedProduct.preview}</Text>
+                            <View style={[styles.previewCard, { borderColor: colorWithOpacity(theme.accent, 0.3) }]}>
+                                {selectedProduct.images[0] ? (
+                                    <Image
+                                        source={{ uri: selectedProduct.images[0] }}
+                                        blurRadius={20}
+                                        resizeMode="cover"
+                                        style={styles.previewCoverBlur}
+                                    />
+                                ) : null}
+                                <LinearGradient
+                                    colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.98)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 0, y: 1 }}
+                                    style={styles.previewCoverFade}
+                                />
+                                <View style={[styles.previewAccent, { backgroundColor: theme.accent }]} />
+                                <Text style={styles.previewTitle}>Avant-goût du livre</Text>
+                                <Text style={styles.previewText}>{selectedProduct.preview}</Text>
                             </View>
                         )}
 
@@ -604,6 +630,8 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
     },
     previewCard: {
+        position: 'relative',
+        overflow: 'hidden',
         borderWidth: 1,
         borderRadius: 18,
         padding: 18,
@@ -613,18 +641,43 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.08,
         shadowRadius: 16,
         elevation: 3,
+        backgroundColor: '#ffffff',
+    },
+    previewCoverBlur: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 132,
+        opacity: 0.24,
+    },
+    previewCoverFade: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 132,
+        pointerEvents: 'none',
     },
     previewTitle: {
         fontSize: 13,
         fontWeight: '900',
+        color: '#0f172a',
         letterSpacing: 0.8,
         textTransform: 'uppercase',
         marginBottom: 10,
+    },
+    previewAccent: {
+        width: 28,
+        height: 3,
+        borderRadius: 2,
+        marginBottom: 12,
     },
     previewText: {
         fontSize: 14,
         lineHeight: 22,
         fontWeight: '700',
+        color: '#334155',
     },
     socialProofCard: {
         backgroundColor: '#fff7ed',

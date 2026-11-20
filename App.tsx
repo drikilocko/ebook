@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
     Montserrat_400Regular,
@@ -28,13 +28,16 @@ import { OrderSuccessScreen } from './src/screens/OrderSuccessScreen';
 import { WishlistScreen } from './src/screens/WishlistScreen';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { AccountScreen } from './src/screens/AccountScreen';
-import { ExploreScreen } from './src/screens/ExploreScreen';
 import { EbookReaderScreen } from './src/screens/EbookReaderScreen';
+import { AppNavigation } from './src/components/AppNavigation';
 import { LanguageProvider } from './src/context/LanguageContext';
-import { ThemeProvider } from './src/context/ThemeContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 const MainNavigator: React.FC = () => {
     const { activeScreen } = useShop();
+    const { width } = useWindowDimensions();
+    const { palette } = useTheme();
+    const isWideScreen = width >= 1024;
 
     const renderScreen = () => {
         switch (activeScreen) {
@@ -52,8 +55,6 @@ const MainNavigator: React.FC = () => {
                 return <AdminScreen />;
             case 'account':
                 return <AccountScreen />;
-            case 'explore':
-                return <ExploreScreen />;
             case 'reader':
                 return <EbookReaderScreen />;
             case 'shop':
@@ -62,7 +63,14 @@ const MainNavigator: React.FC = () => {
         }
     };
 
-    return <View style={styles.appWrapper}>{renderScreen()}</View>;
+    return (
+        <View style={[styles.appWrapper, { backgroundColor: palette.background }]}>
+            <View style={[styles.screenContainer, isWideScreen ? styles.screenContainerWide : styles.screenContainerMobile]}>
+                {renderScreen()}
+            </View>
+            <AppNavigation vertical={isWideScreen} />
+        </View>
+    );
 };
 
 export default function App() {
@@ -104,5 +112,15 @@ const styles = StyleSheet.create({
     },
     appWrapper: {
         flex: 1,
+        position: 'relative',
+    },
+    screenContainer: {
+        flex: 1,
+    },
+    screenContainerWide: {
+        marginLeft: 102,
+    },
+    screenContainerMobile: {
+        marginBottom: 88,
     },
 });

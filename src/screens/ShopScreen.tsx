@@ -135,18 +135,6 @@ export const ShopScreen: React.FC = () => {
         setFilterState((current) => ({ ...current, category: categoryId }));
     };
 
-    const navButton = (icon: keyof typeof Feather.glyphMap, label: string, screen: 'shop' | 'account' | 'wishlist' | 'explore') => (
-        <TouchableOpacity
-            key={screen}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            onPress={() => navigateTo(screen)}
-            style={[styles.railButton, { backgroundColor: screen === 'shop' ? palette.surfaceAlt : 'transparent' }]}
-        >
-            <Feather name={icon} size={19} color={screen === 'shop' ? palette.text : palette.muted} />
-        </TouchableOpacity>
-    );
-
     const sectionTitle = (title: string, action?: string, onAction?: () => void) => (
         <View style={styles.sectionHeading}>
             <AppText style={[styles.sectionTitle, { color: palette.text }]}>{title}</AppText>
@@ -161,22 +149,6 @@ export const ShopScreen: React.FC = () => {
 
     return (
         <View style={[styles.app, { backgroundColor: palette.background }]}>
-            {isDesktop ? (
-                <View style={[styles.sideRail, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                    <TouchableOpacity onPress={() => navigateTo('shop')} style={styles.railBrand}>
-                        <Feather name="book-open" size={23} color={palette.accent} />
-                    </TouchableOpacity>
-                    {navButton('grid', 'Boutique', 'shop')}
-                    {navButton('book-open', 'Mes livres', 'account')}
-                    {navButton('heart', 'Favoris', 'wishlist')}
-                    {navButton('compass', 'Explorer', 'explore')}
-                    <View style={styles.railSpacer} />
-                    <TouchableOpacity onPress={() => setShowAuthModal(true)} style={styles.railButton} accessibilityLabel="Connexion">
-                        <Feather name="user" size={19} color={palette.muted} />
-                    </TouchableOpacity>
-                </View>
-            ) : null}
-
             <View style={styles.main}>
                 <View style={[styles.topBar, !isTablet && styles.topBarMobile, { backgroundColor: palette.background, borderColor: palette.border }]}>
                     <View style={styles.topBarBrand}>
@@ -438,16 +410,6 @@ export const ShopScreen: React.FC = () => {
 const styles = StyleSheet.create({
     app: { flex: 1, flexDirection: 'row' },
     main: { flex: 1, minWidth: 0 },
-    sideRail: {
-        width: 76,
-        alignItems: 'center',
-        paddingTop: 22,
-        paddingBottom: 18,
-        borderRightWidth: 1,
-    },
-    railBrand: { height: 56, alignItems: 'center', justifyContent: 'center', marginBottom: 26 },
-    railButton: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 13 },
-    railSpacer: { flex: 1 },
     topBar: {
         minHeight: 82,
         paddingHorizontal: 28,
@@ -482,7 +444,7 @@ const styles = StyleSheet.create({
     countBadge: { width: 8, height: 8, borderRadius: 4, position: 'absolute', top: 8, right: 8 },
     scrollContent: { paddingTop: 24, paddingBottom: 40 },
     contentColumns: { flexDirection: 'row', alignItems: 'flex-start', gap: 28, maxWidth: 1450, width: '100%', alignSelf: 'center' },
-    contentColumnsStacked: { flexDirection: 'column' },
+    contentColumnsStacked: { flexDirection: 'column', alignItems: 'stretch' },
     primaryColumn: { flex: 1, minWidth: 0 },
     secondaryColumn: { width: 310 },
     secondaryColumnStacked: { width: '100%' },

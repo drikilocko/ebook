@@ -1,7 +1,7 @@
 # Supabase setup
 
 1. For a fresh project, open the project's SQL Editor and run `schema.sql`. For an existing project, run `migrations/20261106000000_add_ebook_payment_status.sql` in the SQL Editor. This migration adds the payment columns, permits address-less ebook orders, protects payment fields and order contents from client changes, makes the ebook bucket private, and refreshes its storage policy. Existing orders previously marked paid are reset to unverified because their status was not independently protected; review legitimate historical purchases manually before restoring access.
-2. Run `migrations/20261111000000_replace_sample_ebooks.sql` to replace the sample catalog entries with the three finance JSON ebooks. Then run `migrations/20261113000000_add_remaining_json_ebooks.sql` to add the other eight books and their cover-image paths. Finally, run `migrations/20261113005800_hide_removed_ebooks.sql` to hide books 08–11 from the customer catalog. This keeps their database rows and storage objects intact so existing paid orders retain access. The configured `seed.sql` is intentionally empty; the migrations are the source of catalog data.
+2. Run `migrations/20261111000000_replace_sample_ebooks.sql` to replace the sample catalog entries with the three finance JSON ebooks. Then run `migrations/20261113000000_add_remaining_json_ebooks.sql` to add the other eight books and their cover-image paths. Finally, run `migrations/20261113005800_hide_removed_ebooks.sql` to hide books 08–11 from the customer catalog. This keeps their database rows and storage objects intact so existing paid orders retain access. To add all JSON books found in `dist/assets/`, run `migrations/20261120000000_add_all_asset_ebooks.sql`, followed by `migrations/20261120010000_fix_ebook_cover_paths.sql`. The configured `seed.sql` is intentionally empty; the migrations are the source of catalog data.
 3. Create a customer account in the app. To grant it admin access, run this query with that account's email:
 
    ```sql
@@ -20,7 +20,7 @@ The catalog points to JSON ebooks in the private Supabase Storage bucket `ebooks
 
 The schema migration marks historical orders whose payment cannot be independently trusted as `unverified`; their payment result cannot be inferred retroactively. Physical-product purchases are excluded from the ebook purchase history and no unverified order is treated as paid or failed.
 
-Upload the JSON ebooks and matching JPG covers from `dist/assets/` to the `formations/` folder in the private `ebooks` bucket and public `product-images` bucket, respectively. Keep the filenames unchanged. Do not delete already-uploaded books 08–11: they are hidden from the catalog but may still be needed for prior purchases. The SQL migrations set catalog paths but cannot upload local files; use the Supabase Storage dashboard before publishing the catalog.
+Upload the JSON ebooks from `dist/assets/` to the `formations/` folder in the private `ebooks` bucket. Upload the matching JPG covers to `ebooks/formations/` in the public `product-images` bucket, keeping filenames unchanged. For an existing catalog, run `migrations/20261120010000_fix_ebook_cover_paths.sql` to update the cover paths. Do not delete already-uploaded books 08–11: they may still be needed for prior purchases. The SQL migrations set catalog paths but cannot upload local files; use the Supabase Storage dashboard before publishing the catalog.
 
 ## PayDunya card and mobile-money checkout
 

@@ -78,7 +78,6 @@ export const Footer: React.FC<FooterProps> = ({ horizontalBleed = 0 }) => {
 
                     {linkColumn('La bibliothèque', [
                         { label: 'Tous les ebooks', onPress: () => navigateTo('shop') },
-                        { label: 'Explorer', onPress: () => navigateTo('explore') },
                         { label: 'Entrepreneuriat', onPress: () => openCategory('ENTREPRENEURIAT') },
                         { label: 'Marketing digital', onPress: () => openCategory('MARKETING DIGITAL') },
                     ])}

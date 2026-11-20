@@ -6,7 +6,7 @@ import { getErrorMessage, isExpiredJwtError, supabase } from '../lib/supabase';
 import { checkPayDunyaOrderStatus } from '../lib/paydunya';
 import { translateText, useLanguage } from './LanguageContext';
 
-type ScreenName = 'shop' | 'product-detail' | 'cart' | 'checkout' | 'order-success' | 'wishlist' | 'admin' | 'account' | 'explore' | 'reader';
+type ScreenName = 'shop' | 'product-detail' | 'cart' | 'checkout' | 'order-success' | 'wishlist' | 'admin' | 'account' | 'reader';
 
 interface ShopContextType {
     products: Product[];
