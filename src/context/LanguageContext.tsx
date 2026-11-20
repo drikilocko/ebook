@@ -3,10 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     Text as NativeText,
     TextInput as NativeTextInput,
+    Platform,
     StyleSheet,
     TextInputProps,
     TextProps,
     TextStyle,
+    useWindowDimensions,
 } from 'react-native';
 
 export type Language = 'en' | 'fr';
@@ -468,10 +470,18 @@ export const LocalizedText: React.FC<TextProps> = ({ children, ...props }) => {
 
 export const LocalizedTextInput: React.FC<TextInputProps> = ({ placeholder, ...props }) => {
     const { language } = useLanguage();
+    const { width } = useWindowDimensions();
+    const inputFontSize = StyleSheet.flatten(props.style)?.fontSize;
+    const preventMobileBrowserZoom = Platform.OS === 'web' && width <= 768;
+
     return (
         <NativeTextInput
             {...props}
-            style={[{ fontFamily: getMontserratFont(StyleSheet.flatten(props.style)?.fontWeight) }, props.style]}
+            style={[
+                { fontFamily: getMontserratFont(StyleSheet.flatten(props.style)?.fontWeight) },
+                props.style,
+                preventMobileBrowserZoom && { fontSize: Math.max(16, inputFontSize ?? 0) },
+            ]}
             placeholder={typeof placeholder === 'string' ? translateText(placeholder, language) : placeholder}
         />
     );

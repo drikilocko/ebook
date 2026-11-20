@@ -4,14 +4,13 @@ import {
     ScrollView,
     StyleSheet,
     Text as AppText,
-    TextInput,
     TouchableOpacity,
     View,
     useWindowDimensions,
 } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '../data/mockData';
-import { useLanguage } from '../context/LanguageContext';
+import { LocalizedTextInput as TextInput, useLanguage } from '../context/LanguageContext';
 import { useShop } from '../context/ShopContext';
 import { ThemeName, ThemePalette, useTheme } from '../context/ThemeContext';
 import { Product } from '../types';
