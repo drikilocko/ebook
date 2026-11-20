@@ -12,7 +12,7 @@
 
 The local app configuration is in `.env.local`; `.env.example` shows the required variable names. The publishable key is intended for client use. Never put a Supabase secret/service-role key in the app.
 
-Email/password authentication is ready. To use Google sign-in, enable the Google provider in Supabase Authentication and configure its OAuth credentials. Add `https://www.dreamyyspace.com/` to **Authentication → URL Configuration → Redirect URLs** in Supabase. Local web development uses the current `localhost` origin, which must also be allowed.
+Email/password authentication is ready. To use Google sign-in, enable the Google provider in Supabase Authentication and configure its OAuth credentials. In the Google OAuth client, add `https://xdqelktebppimkzhjuun.supabase.co/auth/v1/callback` as an authorized redirect URI. In Supabase, set the Site URL to `https://www.secretdange.com/` and add it to **Authentication → URL Configuration → Redirect URLs**. Local web development uses the current `localhost` origin, which must also be allowed.
 
 ## Ebooks and private downloads
 

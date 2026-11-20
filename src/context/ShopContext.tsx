@@ -107,7 +107,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ? undefined
             : window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
                 ? window.location.origin
-                : 'https://www.dreamyyspace.com/';
+                : 'https://www.secretdange.com/';
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
